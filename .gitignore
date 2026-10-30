@@ -1,0 +1,4 @@
+# the provenance an analyst session stores (a DuckDB file and the artifacts of every step); keep the folder itself
+provenance/*
+!provenance/.gitkeep
+__pycache__/
