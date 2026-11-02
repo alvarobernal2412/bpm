@@ -80,7 +80,9 @@ also works when started with the launcher or with plain `marimo run`.
   the note, the maps and the tables. Also against the released pmprov 0.10.0 and marimo-pmprov 0.2.4. The drop area of the
   reviewer could not be driven by the test tool (the zip is over its 10 MB limit); the same code path through a `provenance.zip`
   next to the notebook was tested. **Not tested on molab itself** beyond the failure that led to this version.
-- The full analysis stores about 40 MB of artifacts. The zip is built in memory when you press the button.
+- The full analysis stores about 45 MB of artifacts, but `provenance.zip` is about 1 MB: it keeps every step, note, table and map and
+  leaves out stored values over 2 MB (copies of the whole log), so a long session stays small. A step whose value was left out
+  still shows in the reviewer; only that value cannot be restored there.
 - Maps in the exported PDF need `kaleido` and a Chrome in the environment; without them the notes and tables still export.
 - `reviewer.py` needs a history named `BPI 2017 Task 1 with LCM maps`, which `analyst.py` creates.
 - The download of `data/` follows `main` of this repository (not a fixed version), and needs internet access from the

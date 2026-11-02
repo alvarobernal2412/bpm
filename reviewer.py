@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.2.4",
+#     "marimo-pmprov[pdf]>=0.2.5",
 #     "pandas>=3.1.0",
 #     "plotly>=7.1.0",
 #     "networkx>=3.7",
@@ -42,6 +42,7 @@ def _():
     from tracker.runtime import RuntimeTracker
     from provenance_widget.pmprov_adapter import PmprovAdapter
     from provenance_widget.widget import ProvenancePanel
+    from provenance_widget.portable import relocate_artifacts, unpack_provenance
 
     def _folder_of_this_notebook():
         try:
@@ -53,53 +54,6 @@ def _():
         return Path.cwd()
 
     HERE = _folder_of_this_notebook()
-
-    def relocate_artifacts(db_path, artifact_dir):
-        """Point the stored artifacts at `artifact_dir`.
-
-        pmprov stores the absolute path of every artifact file, so a provenance folder that was copied or downloaded
-        (from molab to a laptop, say) still points at its old location, and its maps and tables could not be restored.
-        The files are found again by name in the folder next to the database.
-        """
-        if not Path(db_path).exists():
-            return 0
-        import re
-
-        import duckdb
-
-        try:
-            con = duckdb.connect(str(db_path))
-            try:
-                changed = 0
-                rows = con.execute("SELECT artifact_state_id, content_ref FROM artifact_states").fetchall()
-                for artifact_state_id, ref in rows:
-                    new = str(Path(artifact_dir) / re.split(r"[\\/]", ref)[-1])
-                    if new != ref:
-                        con.execute(
-                            "UPDATE artifact_states SET content_ref = ? WHERE artifact_state_id = ?",
-                            [new, artifact_state_id],
-                        )
-                        changed += 1
-                return changed
-            finally:
-                con.close()
-        except Exception:
-            return 0  # no history stored yet
-
-    def unpack_provenance(zip_bytes, target):
-        """Unzip a `provenance.zip` into `target`, refusing any member that would land outside it."""
-        import io
-        import zipfile
-
-        target = Path(target)
-        target.mkdir(parents=True, exist_ok=True)
-        root = target.resolve()
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
-            for member in archive.infolist():
-                destination = (root / member.filename).resolve()
-                if destination != root and root not in destination.parents:
-                    raise ValueError(f"unsafe path in the zip file: {member.filename}")
-            archive.extractall(root)
 
     # Where the provenance is read from: ./provenance next to the notebook, or PMPROV_DIR; a temporary folder if that
     # one cannot be written (a read-only project).

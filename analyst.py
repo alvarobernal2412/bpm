@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.2.4",
+#     "marimo-pmprov[pdf]>=0.2.5",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -54,6 +54,7 @@ def _():
     from provenance_widget.pmprov_adapter import PmprovAdapter
     from provenance_widget.widget import ProvenancePanel
     from provenance_widget.display import show_chart, show_table
+    from provenance_widget.portable import relocate_artifacts, zip_provenance
 
     def _folder_of_this_notebook():
         # mo.notebook_location() is the folder of the notebook; if a platform returns something else, use the
@@ -107,38 +108,6 @@ def _():
         PROVENANCE_DIR = Path(_tempfile.mkdtemp(prefix="bpm-provenance-"))
         (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
 
-    def relocate_artifacts(db_path, artifact_dir):
-        """Point the stored artifacts at `artifact_dir`.
-
-        pmprov stores the absolute path of every artifact file, so a provenance folder that was copied or downloaded
-        (from molab to a laptop, say) still points at its old location, and its maps and tables could not be restored.
-        The files are found again by name in the folder next to the database.
-        """
-        if not Path(db_path).exists():
-            return 0
-        import re
-
-        import duckdb
-
-        try:
-            con = duckdb.connect(str(db_path))
-            try:
-                changed = 0
-                rows = con.execute("SELECT artifact_state_id, content_ref FROM artifact_states").fetchall()
-                for artifact_state_id, ref in rows:
-                    new = str(Path(artifact_dir) / re.split(r"[\\/]", ref)[-1])
-                    if new != ref:
-                        con.execute(
-                            "UPDATE artifact_states SET content_ref = ? WHERE artifact_state_id = ?",
-                            [new, artifact_state_id],
-                        )
-                        changed += 1
-                return changed
-            finally:
-                con.close()
-        except Exception:
-            return 0  # no history stored yet
-
     # a history that was downloaded from another machine points at that machine's folders
     relocate_artifacts(PROVENANCE_DIR / "provenance.db", PROVENANCE_DIR / "artifacts")
 
@@ -185,30 +154,25 @@ def _():
         rt,
         show_chart,
         show_table,
+        zip_provenance,
     )
 
 
 @app.cell(hide_code=True)
-def _(PROVENANCE_DIR, Path, mo, rt):
+def _(PROVENANCE_DIR, mo, rt, zip_provenance):
     def provenance_zip():
-        """Everything recorded so far (the database and the artifacts) as one zip file."""
-        import io
-        import zipfile
-
+        """The history as one small zip file: the steps and notes, and the values small enough to carry."""
         rt.storage._executor.submit(lambda: None).result()  # let the writes that are still queued land first
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for path in sorted(Path(PROVENANCE_DIR).rglob("*")):
-                if path.is_file():
-                    archive.write(path, path.relative_to(PROVENANCE_DIR).as_posix())
-        return buffer.getvalue()
+        data, _left_out = zip_provenance(PROVENANCE_DIR)
+        return data
 
     mo.vstack([
         mo.callout(mo.md(f"Provenance is stored in `{PROVENANCE_DIR}`."), kind="info"),
         mo.md(
             "A hosted notebook keeps its own files, so take the provenance with you before you close it: "
             "download it here, then drop `provenance.zip` into `reviewer.py` (or unzip it next to the notebooks "
-            "on your own machine)."
+            "on your own machine). The file keeps every step and note and the tables and maps; a stored value over "
+            "2 MB, such as a copy of the whole log, is left out so the file stays small."
         ),
         mo.download(data=provenance_zip, filename="provenance.zip", label="Download provenance.zip"),
     ])
