@@ -21,12 +21,12 @@ def _(mo):
     mo.md(r"""
     # BPI Challenge 2017, Task 1: Schemas (reviewer)
 
-    The reviewer notebook. It opens the provenance that `analyst.py` stored in the `provenance/` folder and **only reads
-    it**: nothing is recorded and nothing can be edited. In the sidebar, step through the recorded analysis with the
+    The reviewer notebook. It opens the provenance that `analyst.py` recorded (the `provenance.zip` you download there)
+    and **only reads it**: nothing is recorded and nothing can be edited. In the sidebar, step through the recorded analysis with the
     replay stepper, or press **Replay** on a note to jump to the step it was written at. The maps and tables below are
     restored as they were at the step you are on.
 
-    Run `analyst.py` first; until it has stored a history there is nothing to review.
+    Run `analyst.py` first and download its `provenance.zip`; until a history is loaded here there is nothing to review.
     """)
     return
 
@@ -35,7 +35,7 @@ def _(mo):
 def _():
     import marimo as mo
     import os as _os
-    import sys as _sys
+    import tempfile as _tempfile
     from pathlib import Path
 
     from tracker.storage import DuckDBSQLiteBackend
@@ -86,22 +86,58 @@ def _():
         except Exception:
             return 0  # no history stored yet
 
-    # restoring a stored map needs the classes it was pickled with
-    if str(HERE / "lcm") not in _sys.path:
-        _sys.path.insert(0, str(HERE / "lcm"))
+    def unpack_provenance(zip_bytes, target):
+        """Unzip a `provenance.zip` into `target`, refusing any member that would land outside it."""
+        import io
+        import zipfile
 
-    PROVENANCE_DIR = Path(_os.environ.get("PMPROV_DIR") or HERE / "provenance")
+        target = Path(target)
+        target.mkdir(parents=True, exist_ok=True)
+        root = target.resolve()
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+            for member in archive.infolist():
+                destination = (root / member.filename).resolve()
+                if destination != root and root not in destination.parents:
+                    raise ValueError(f"unsafe path in the zip file: {member.filename}")
+            archive.extractall(root)
+
+    # Where the provenance is read from: ./provenance next to the notebook, or PMPROV_DIR; a temporary folder if that
+    # one cannot be written (a read-only project).
+    _wanted = Path(_os.environ.get("PMPROV_DIR") or HERE / "provenance")
+    try:
+        _wanted.mkdir(parents=True, exist_ok=True)
+        PROVENANCE_DIR = _wanted
+    except OSError:
+        PROVENANCE_DIR = Path(_tempfile.mkdtemp(prefix="bpm-provenance-"))
+
     HISTORY_NAME = "BPI 2017 Task 1 with LCM maps"
     return (
         DuckDBSQLiteBackend,
         HISTORY_NAME,
+        HERE,
         PROVENANCE_DIR,
+        Path,
         PmprovAdapter,
         ProvenancePanel,
         RuntimeTracker,
         mo,
         relocate_artifacts,
+        unpack_provenance,
     )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # A hosted notebook has its own files, so the provenance comes in as the zip file the analyst notebook offers.
+    uploaded_provenance = mo.ui.file(filetypes=[".zip"], kind="area", label="Drop provenance.zip here")
+    mo.vstack([
+        mo.md(
+            "**Provenance.** Download `provenance.zip` from `analyst.py` and drop it here (or put it next to this "
+            "notebook). Dropping a file replaces the history that is loaded."
+        ),
+        uploaded_provenance,
+    ])
+    return (uploaded_provenance,)
 
 
 @app.cell(hide_code=True)
@@ -109,14 +145,24 @@ def _(
     DuckDBSQLiteBackend,
     HISTORY_NAME,
     PROVENANCE_DIR,
+    HERE,
+    Path,
     RuntimeTracker,
     mo,
     relocate_artifacts,
+    unpack_provenance,
+    uploaded_provenance,
 ):
+    # a zip dropped into the notebook, or a provenance.zip next to it, becomes the folder that is read
+    if uploaded_provenance.value:
+        unpack_provenance(uploaded_provenance.value[0].contents, PROVENANCE_DIR)
+    elif not (PROVENANCE_DIR / "provenance.db").exists() and (HERE / "provenance.zip").exists():
+        unpack_provenance((HERE / "provenance.zip").read_bytes(), PROVENANCE_DIR)
+
     mo.stop(
         not (PROVENANCE_DIR / "provenance.db").exists(),
         mo.callout(
-            mo.md(f"No provenance in `{PROVENANCE_DIR}` yet. Run `analyst.py` first, then reload this notebook."),
+            mo.md("No provenance loaded yet. Drop the `provenance.zip` from `analyst.py` above."),
             kind="warn",
         ),
     )

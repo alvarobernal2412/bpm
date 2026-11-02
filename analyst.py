@@ -4,6 +4,7 @@
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
 #     "marimo-pmprov[pdf]>=0.2.4",
+#     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
 #     "networkx>=3.7",
@@ -26,8 +27,8 @@ def _(mo):
     (31,509 applications, 1.2 million events) with the maps of the
     [Linear Continuous Process Mapper](https://github.com/aaronkurz/linear-continuous-process-mapper-marimo), and records
     every analysis step with `pmprov`. In the sidebar you can **Pick** a map or a table as the target of a note, write
-    the note, and **Export PDF** for the report. The recorded steps and notes are stored in the `provenance/` folder
-    next to this notebook; open `reviewer.py` to step through them read-only.
+    the note, and **Export PDF** for the report. The recorded steps and notes are stored in a `provenance/` folder;
+    download it as `provenance.zip` (below) and open it in `reviewer.py` to step through it read-only.
 
     1. Which data schema is associated with the activity `A_Create Application`?
     2. Which attributes of this schema have missing values?
@@ -44,7 +45,6 @@ def _():
     import marimo as mo
     import pandas as pd
     import os as _os
-    import sys as _sys
     import tempfile as _tempfile
     from pathlib import Path
 
@@ -68,9 +68,34 @@ def _():
 
     HERE = _folder_of_this_notebook()
 
-    # The Linear Continuous Process Mapper (its `app` and `core` packages) is vendored in ./lcm
-    if str(HERE / "lcm") not in _sys.path:
-        _sys.path.insert(0, str(HERE / "lcm"))
+    PROJECT_ZIP_URL = "https://github.com/alvarobernal2412/bpm/archive/refs/heads/main.zip"
+
+    def project_files(here):
+        """The folder that holds `data/` (the log).
+
+        Next to the notebook when the whole folder is there (a local checkout). A platform that delivers only the
+        notebook file, such as molab opening it from GitHub, does not bring it, so it is downloaded once from
+        the repository into a temporary folder.
+        """
+        if (here / "data" / "bpi2017.parquet").exists():
+            return here
+        target = Path(_tempfile.gettempdir()) / "bpm-project-files"
+        if not (target / "data" / "bpi2017.parquet").exists():
+            import io
+            import urllib.request
+            import zipfile
+
+            with urllib.request.urlopen(PROJECT_ZIP_URL, timeout=300) as response:
+                archive = zipfile.ZipFile(io.BytesIO(response.read()))
+            for member in archive.namelist():
+                parts = member.split("/", 1)  # "bpm-main/data/x" -> "data/x"
+                if len(parts) == 2 and parts[1].startswith("data/") and not member.endswith("/"):
+                    destination = target / parts[1]
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(archive.read(member))
+        return target
+
+    FILES = project_files(HERE)
 
     # Where the provenance is stored: ./provenance next to the notebooks, or PMPROV_DIR. If that folder cannot be
     # written (read-only project), a temporary folder is used so the notebook still runs.
@@ -149,7 +174,7 @@ def _():
         )
 
     return (
-        HERE,
+        FILES,
         PROVENANCE_DIR,
         Path,
         PmprovAdapter,
@@ -164,8 +189,29 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(PROVENANCE_DIR, mo):
-    mo.callout(mo.md(f"Provenance is stored in `{PROVENANCE_DIR}`."), kind="info")
+def _(PROVENANCE_DIR, Path, mo, rt):
+    def provenance_zip():
+        """Everything recorded so far (the database and the artifacts) as one zip file."""
+        import io
+        import zipfile
+
+        rt.storage._executor.submit(lambda: None).result()  # let the writes that are still queued land first
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(Path(PROVENANCE_DIR).rglob("*")):
+                if path.is_file():
+                    archive.write(path, path.relative_to(PROVENANCE_DIR).as_posix())
+        return buffer.getvalue()
+
+    mo.vstack([
+        mo.callout(mo.md(f"Provenance is stored in `{PROVENANCE_DIR}`."), kind="info"),
+        mo.md(
+            "A hosted notebook keeps its own files, so take the provenance with you before you close it: "
+            "download it here, then drop `provenance.zip` into `reviewer.py` (or unzip it next to the notebooks "
+            "on your own machine)."
+        ),
+        mo.download(data=provenance_zip, filename="provenance.zip", label="Download provenance.zip"),
+    ])
     return
 
 
@@ -185,8 +231,8 @@ def _(mo, panel):
 
 
 @app.cell(hide_code=True)
-def _(HERE, Path, pd, record):
-    from app.factory import create_process_analytics_service
+def _(FILES, Path, pd, record):
+    import lcm
 
     ACTIVITY = "concept:name"
     CASE_ID = "case:concept:name"
@@ -200,8 +246,8 @@ def _(HERE, Path, pd, record):
             )
         return pd.read_parquet(parquet_path)
 
-    event_log = record(["event_log"], load_event_log, HERE / "data" / "bpi2017.parquet")
-    return ACTIVITY, CASE_ID, TIMESTAMP, create_process_analytics_service, event_log
+    event_log = record(["event_log"], load_event_log, FILES / "data" / "bpi2017.parquet")
+    return ACTIVITY, CASE_ID, TIMESTAMP, event_log, lcm
 
 
 @app.cell(hide_code=True)
@@ -214,7 +260,7 @@ def _(ACTIVITY, CASE_ID, event_log, mo):
 
 
 @app.cell(hide_code=True)
-def _(ACTIVITY, CASE_ID, TIMESTAMP, create_process_analytics_service, pd):
+def _(ACTIVITY, CASE_ID, TIMESTAMP, lcm, pd):
     # The steps of the analysis, as plain functions. Each one is run through record() where it is used.
 
     def attribute_coverage(log, activity):
@@ -247,11 +293,9 @@ def _(ACTIVITY, CASE_ID, TIMESTAMP, create_process_analytics_service, pd):
 
     def draw_map(log, activities, builder, allow_loops, show_empty, height):
         """A Linear Continuous Process Mapper map of `log` over `activities`."""
-        service = create_process_analytics_service(log)
-        figure, metadata = service.generate_sankey_figure(
-            selected_activities=activities,
-            builder_key=builder,
-            merge_threshold=None,
+        figure, metadata = lcm.get_service(log).generate(
+            activities=activities,
+            map_type=builder,
             allow_loops=allow_loops,
             visualize_empty_cases=show_empty,
         )
