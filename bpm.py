@@ -293,6 +293,7 @@ def _(MODE, NotStored, adapter, get_cursor, mo, panel, rt):
     # shows its own output as it was then, and a cell whose step has not happened yet shows nothing, like a replay.
     if MODE == "analyst":
         snap = None
+        produced = {}  # target name -> the state of the step that produced it
 
         def record(targets, function, *args, name=None, **kwargs):
             """Run one analysis step and record it with pmprov.
@@ -303,7 +304,7 @@ def _(MODE, NotStored, adapter, get_cursor, mo, panel, rt):
             result unchanged.
             """
             label = name or function.__name__
-            return rt.trace_step(
+            result = rt.trace_step(
                 func=function,
                 func_name=label,
                 raw_line=f"{', '.join(targets)} = {label}(...)",
@@ -311,6 +312,13 @@ def _(MODE, NotStored, adapter, get_cursor, mo, panel, rt):
                 kwargs=kwargs,
                 targets=list(targets),
             )
+            for target in targets:
+                produced[target] = rt._current_state_id
+            return result
+
+        def state_of(target):
+            """The recorded state that produced `target`: what a note about it is attached to."""
+            return produced.get(target) or adapter.latest_state_id() or "analysis"
     else:
         # the whole analysis at the step the reviewer is on (the latest one until they step); this cell re-runs, and
         # with it every cell that uses record(), each time the stepper or a Replay moves the cursor
@@ -323,7 +331,10 @@ def _(MODE, NotStored, adapter, get_cursor, mo, panel, rt):
             values = [snap.get(t) if snap.status(t) == "ok" else NotStored() for t in targets]
             return values[0] if len(values) == 1 else tuple(values)
 
-    return record, snap
+        def state_of(target):
+            return snap.state_id or "analysis"
+
+    return record, snap, state_of
 
 
 @app.cell(hide_code=True)
@@ -477,8 +488,8 @@ def _(attribute_coverage, attributes_with_a_value, event_log, record):
 
 
 @app.cell(hide_code=True)
-def _(create_schema, mo, panel, show_table):
-    _state = panel.latest_state_id or "analysis"
+def _(create_schema, mo, show_table, state_of):
+    _state = state_of("create_schema")
     mo.vstack([
         mo.md(f"`A_Create Application` has **{len(create_schema)} attributes** in its schema:"),
         show_table(
@@ -520,8 +531,8 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(MODE, application_figure, application_meta, case_count, mo, panel, show_chart, start_share):
-    _state = panel.latest_state_id or "analysis"
+def _(MODE, application_figure, application_meta, case_count, mo, show_chart, start_share, state_of):
+    _state = state_of("application_figure")
     mo.vstack([
         mo.md(
             f"**Set-based map of the application states, all {case_count:,} cases.** "
@@ -559,8 +570,8 @@ def _(create_coverage, create_schema, missing_values_of, record):
 
 
 @app.cell(hide_code=True)
-def _(missing_values, mo, outside_schema, panel, show_table):
-    _state = panel.latest_state_id or "analysis"
+def _(missing_values, mo, outside_schema, show_table, state_of):
+    _state = state_of("missing_values")
     _total = int(missing_values["missing"].sum())
     mo.vstack([
         mo.md(
@@ -595,8 +606,8 @@ def _(attribute_reuse_of, event_log, record):
 
 
 @app.cell(hide_code=True)
-def _(attribute_reuse, mo, panel, show_table):
-    _state = panel.latest_state_id or "analysis"
+def _(attribute_reuse, mo, show_table, state_of):
+    _state = state_of("attribute_reuse")
     mo.vstack([
         mo.md(
             f"**{int((attribute_reuse['activities'] > 1).sum())} of {len(attribute_reuse)} attributes** take a value "
@@ -625,8 +636,8 @@ def _(distinct_activities, draw_map, event_log, events_carrying, record):
 
 
 @app.cell(hide_code=True)
-def _(MODE, mo, offer_id_activities, offer_id_figure, offer_id_meta, panel, show_chart):
-    _state = panel.latest_state_id or "analysis"
+def _(MODE, mo, offer_id_activities, offer_id_figure, offer_id_meta, show_chart, state_of):
+    _state = state_of("offer_id_figure")
     mo.vstack([
         mo.md(
             f"**`OfferID` is re-used.** The map of the events that carry it has {len(offer_id_activities)} activities: "
@@ -656,8 +667,8 @@ def _(distinct_activities, draw_map, event_log, events_carrying, record):
 
 
 @app.cell(hide_code=True)
-def _(MODE, credit_score_activities, credit_score_figure, mo, panel, show_chart):
-    _state = panel.latest_state_id or "analysis"
+def _(MODE, credit_score_activities, credit_score_figure, mo, show_chart, state_of):
+    _state = state_of("credit_score_figure")
     mo.vstack([
         mo.md(
             f"**`CreditScore` is not re-used.** The map of the events that carry it has "
@@ -727,8 +738,8 @@ def _(case_activity_timestamp, draw_map, event_log, get_view, mo, record):
 
 
 @app.cell(hide_code=True)
-def _(explorer_figure, explorer_meta, mo, panel, show_chart):
-    _state = panel.latest_state_id or "analysis"
+def _(explorer_figure, explorer_meta, mo, show_chart, state_of):
+    _state = state_of("explorer_figure")
     _nodes = explorer_meta["total_nodes"]
     mo.vstack([
         mo.callout(
@@ -749,7 +760,7 @@ def _(explorer_figure, explorer_meta, mo, panel, show_chart):
 
 
 @app.cell(hide_code=True)
-def _(MODE, mo, panel, show_chart, snap):
+def _(MODE, mo, show_chart, snap, state_of):
     # the explorer's controls only exist in analyst mode; a reviewer sees the map the analyst last drew, as it was
     mo.stop(MODE != "reviewer")
     mo.stop(snap.status("explorer_figure") != "ok", mo.md(snap.missing("explorer_figure")))
@@ -757,7 +768,7 @@ def _(MODE, mo, panel, show_chart, snap):
         mo.md(f"{snap.get('explorer_meta')['total_nodes']:,} nodes."),
         show_chart(
             mo.as_html(snap.get("explorer_figure")),
-            artifact_id=panel.latest_state_id or "analysis",
+            artifact_id=state_of("explorer_figure"),
             artifact_name="map_explorer",
         ),
     ])
