@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.2.5",
+#     "marimo-pmprov[pdf]>=0.3.0",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -21,14 +21,18 @@ app = marimo.App(width="full")
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # BPI Challenge 2017, Task 1: Schemas (analyst)
+    # BPI Challenge 2017, Task 1: Schemas
 
-    The analyst notebook. It answers the three questions of the first exploratory task on the **whole** log
-    (31,509 applications, 1.2 million events) with the maps of the
-    [Linear Continuous Process Mapper](https://github.com/aaronkurz/linear-continuous-process-mapper-marimo), and records
-    every analysis step with `pmprov`. In the sidebar you can **Pick** a map or a table as the target of a note, write
-    the note, and **Export PDF** for the report. The recorded steps and notes are stored in a `provenance/` folder;
-    download it as `provenance.zip` (below) and open it in `reviewer.py` to step through it read-only.
+    One notebook, two modes.
+
+    - **Analyst** answers the three questions of the first exploratory task on the **whole** log
+      (31,509 applications, 1.2 million events) with the maps of the
+      [Linear Continuous Process Mapper](https://github.com/alvarobernal2412/lc-maps), and records every analysis step with
+      `pmprov`. In the sidebar you can **Pick** a map or a table as the target of a note, write the note, and
+      **Export PDF** for the report.
+    - **Reviewer** opens the provenance an analyst recorded and **only reads it**: nothing is recorded and nothing can be
+      edited. Step through the analysis with the replay stepper, or press **Replay** on a note to jump to its step; the
+      maps and tables are restored as they were at that step, and the element the note is about is highlighted.
 
     1. Which data schema is associated with the activity `A_Create Application`?
     2. Which attributes of this schema have missing values?
@@ -51,10 +55,12 @@ def _():
     import warnings as _warnings
 
     from tracker import init_marimo
+    from tracker.runtime import RuntimeTracker
+    from tracker.storage import DuckDBSQLiteBackend
     from provenance_widget.pmprov_adapter import PmprovAdapter
     from provenance_widget.widget import ProvenancePanel
-    from provenance_widget.display import show_chart, show_table
-    from provenance_widget.portable import relocate_artifacts, zip_provenance
+    from provenance_widget.display import show, show_chart, show_table
+    from provenance_widget.portable import relocate_artifacts, unpack_provenance, zip_provenance
 
     def _folder_of_this_notebook():
         # mo.notebook_location() is the folder of the notebook; if a platform returns something else, use the
@@ -96,9 +102,7 @@ def _():
                     destination.write_bytes(archive.read(member))
         return target
 
-    FILES = project_files(HERE)
-
-    # Where the provenance is stored: ./provenance next to the notebooks, or PMPROV_DIR. If that folder cannot be
+    # Where the provenance is stored: ./provenance next to the notebook, or PMPROV_DIR. If that folder cannot be
     # written (read-only project), a temporary folder is used so the notebook still runs.
     _wanted = Path(_os.environ.get("PMPROV_DIR") or HERE / "provenance")
     try:
@@ -108,21 +112,123 @@ def _():
         PROVENANCE_DIR = Path(_tempfile.mkdtemp(prefix="bpm-provenance-"))
         (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
 
-    # a history that was downloaded from another machine points at that machine's folders
-    relocate_artifacts(PROVENANCE_DIR / "provenance.db", PROVENANCE_DIR / "artifacts")
-
     HISTORY_NAME = "BPI 2017 Task 1 with LCM maps"
 
     # pmprov warns that its cell rewriting is not active; the steps are recorded explicitly with record() below
     _warnings.filterwarnings("ignore", message=r"init_marimo\(\) was called but patch_marimo_ast_compile")
 
-    rt = init_marimo(
-        history_name=HISTORY_NAME,
-        branch_name="main",
-        db_path=str(PROVENANCE_DIR / "provenance.db"),
-        artifact_dir=str(PROVENANCE_DIR / "artifacts"),
-        fresh=False,  # continue the stored history of this name after a restart
+    return (
+        DuckDBSQLiteBackend,
+        HERE,
+        HISTORY_NAME,
+        PROVENANCE_DIR,
+        Path,
+        PmprovAdapter,
+        ProvenancePanel,
+        RuntimeTracker,
+        init_marimo,
+        mo,
+        pd,
+        project_files,
+        relocate_artifacts,
+        show,
+        show_chart,
+        show_table,
+        unpack_provenance,
+        zip_provenance,
     )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # The mode is chosen before the run when it can be: `marimo run bpm.py -- --mode reviewer`, or the PMPROV_MODE
+    # environment variable. A hosted notebook (molab) cannot be started with either, so then the notebook shows a switch.
+    import os as _os
+
+    MODE_GIVEN = mo.cli_args().get("mode") or _os.environ.get("PMPROV_MODE") or None
+    if MODE_GIVEN not in (None, "analyst", "reviewer"):
+        raise ValueError(f"mode must be 'analyst' or 'reviewer', not {MODE_GIVEN!r}")
+    mode_switch = mo.ui.radio(options=["analyst", "reviewer"], value="analyst", inline=True, label="Mode")
+    return MODE_GIVEN, mode_switch
+
+
+@app.cell(hide_code=True)
+def _(MODE_GIVEN, mo, mode_switch):
+    mo.callout(
+        mo.md(f"Mode: **{MODE_GIVEN}** (chosen before the run).")
+        if MODE_GIVEN
+        else mo.hstack([mode_switch, mo.md("Choose how to use this notebook; you can switch at any time.")], justify="start", gap=2),
+        kind="info",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(MODE_GIVEN, mode_switch):
+    MODE = MODE_GIVEN or mode_switch.value
+    return (MODE,)
+
+
+@app.cell(hide_code=True)
+def _(MODE, mo):
+    # A hosted notebook has its own files, so a reviewer gets the provenance as the zip file the analyst downloads.
+    uploaded_provenance = mo.ui.file(filetypes=[".zip"], kind="area", label="Drop provenance.zip here")
+    mo.vstack([
+        mo.md(
+            "**Provenance.** Download `provenance.zip` from an analyst session and drop it here (or put it next to this "
+            "notebook). Dropping a file replaces the history that is loaded."
+        ),
+        uploaded_provenance,
+    ]) if MODE == "reviewer" else None
+    return (uploaded_provenance,)
+
+
+@app.cell(hide_code=True)
+def _(
+    DuckDBSQLiteBackend,
+    HERE,
+    HISTORY_NAME,
+    MODE,
+    PROVENANCE_DIR,
+    RuntimeTracker,
+    init_marimo,
+    mo,
+    relocate_artifacts,
+    unpack_provenance,
+    uploaded_provenance,
+):
+    if MODE == "analyst":
+        # a history that was downloaded from another machine points at that machine's folders
+        relocate_artifacts(PROVENANCE_DIR / "provenance.db", PROVENANCE_DIR / "artifacts")
+        rt = init_marimo(
+            history_name=HISTORY_NAME,
+            branch_name="main",
+            db_path=str(PROVENANCE_DIR / "provenance.db"),
+            artifact_dir=str(PROVENANCE_DIR / "artifacts"),
+            fresh=False,  # continue the stored history of this name after a restart
+        )
+    else:
+        # a zip dropped into the notebook, or a provenance.zip next to it, becomes the folder that is read
+        if uploaded_provenance.value:
+            unpack_provenance(uploaded_provenance.value[0].contents, PROVENANCE_DIR)
+        elif not (PROVENANCE_DIR / "provenance.db").exists() and (HERE / "provenance.zip").exists():
+            unpack_provenance((HERE / "provenance.zip").read_bytes(), PROVENANCE_DIR)
+
+        mo.stop(
+            not (PROVENANCE_DIR / "provenance.db").exists(),
+            mo.callout(mo.md("No provenance loaded yet. Drop the `provenance.zip` of an analyst session above."), kind="warn"),
+        )
+        relocate_artifacts(PROVENANCE_DIR / "provenance.db", PROVENANCE_DIR / "artifacts")
+        _storage = DuckDBSQLiteBackend(
+            db_path=PROVENANCE_DIR / "provenance.db", artifact_dir=PROVENANCE_DIR / "artifacts"
+        )
+        _history_id = _storage.find_latest_history_by_name(HISTORY_NAME)
+        mo.stop(
+            _history_id is None,
+            mo.callout(mo.md(f"The store has no history named `{HISTORY_NAME}`. Record one in analyst mode first."), kind="warn"),
+        )
+        # Resume the stored history without installing the kernel hooks of init_marimo(): a reviewer records nothing.
+        rt = RuntimeTracker.resume(_storage, _history_id, session_id="reviewer")
 
     def record(targets, function, *args, name=None, **kwargs):
         """Run one analysis step and record it with pmprov.
@@ -142,24 +248,13 @@ def _():
             targets=list(targets),
         )
 
-    return (
-        FILES,
-        PROVENANCE_DIR,
-        Path,
-        PmprovAdapter,
-        ProvenancePanel,
-        mo,
-        pd,
-        record,
-        rt,
-        show_chart,
-        show_table,
-        zip_provenance,
-    )
+    return record, rt
 
 
 @app.cell(hide_code=True)
-def _(PROVENANCE_DIR, mo, rt, zip_provenance):
+def _(MODE, PROVENANCE_DIR, mo, rt, zip_provenance):
+    mo.stop(MODE != "analyst")
+
     def provenance_zip():
         """The history as one small zip file: the steps and notes, and the values small enough to carry."""
         rt.storage._executor.submit(lambda: None).result()  # let the writes that are still queued land first
@@ -170,9 +265,9 @@ def _(PROVENANCE_DIR, mo, rt, zip_provenance):
         mo.callout(mo.md(f"Provenance is stored in `{PROVENANCE_DIR}`."), kind="info"),
         mo.md(
             "A hosted notebook keeps its own files, so take the provenance with you before you close it: "
-            "download it here, then drop `provenance.zip` into `reviewer.py` (or unzip it next to the notebooks "
-            "on your own machine). The file keeps every step and note and the tables and maps; a stored value over "
-            "2 MB, such as a copy of the whole log, is left out so the file stays small."
+            "download it here, then drop `provenance.zip` into this notebook in reviewer mode (or unzip it next to "
+            "the notebook on your own machine). The file keeps every step and note and the tables and maps; a stored "
+            "value over 2 MB, such as a copy of the whole log, is left out so the file stays small."
         ),
         mo.download(data=provenance_zip, filename="provenance.zip", label="Download provenance.zip"),
     ])
@@ -180,11 +275,19 @@ def _(PROVENANCE_DIR, mo, rt, zip_provenance):
 
 
 @app.cell(hide_code=True)
-def _(PmprovAdapter, ProvenancePanel, rt):
+def _(MODE, PmprovAdapter, ProvenancePanel, mo, rt):
     adapter = PmprovAdapter(rt)
-    # the analyst can annotate, edit and export; the reviewer notebook opens the same store read-only
-    panel = ProvenancePanel(source=adapter, mode="analyst", tabs=["curated"])
-    return (panel,)
+    if MODE == "analyst":
+        # the analyst can annotate, edit and export
+        panel = ProvenancePanel(source=adapter, mode="analyst", tabs=["curated"])
+        get_cursor = None
+    else:
+        panel = ProvenancePanel(source=adapter, mode="reviewer")
+        # build the tree now, not in the background, so the first snapshot below already knows its step
+        panel.refresh()
+        # every step of the stepper, and every Replay on a note, moves this cursor; cells that call get_cursor() re-run
+        get_cursor = panel.reactive_cursor(mo.state)
+    return adapter, get_cursor, panel
 
 
 @app.cell(hide_code=True)
@@ -195,7 +298,9 @@ def _(mo, panel):
 
 
 @app.cell(hide_code=True)
-def _(FILES, Path, pd, record):
+def _(HERE, MODE, Path, mo, pd, project_files, record):
+    # Everything below that depends on the log is the analysis; a reviewer does not run it, it reads what was recorded.
+    mo.stop(MODE != "analyst")
     import lcm
 
     ACTIVITY = "concept:name"
@@ -210,7 +315,7 @@ def _(FILES, Path, pd, record):
             )
         return pd.read_parquet(parquet_path)
 
-    event_log = record(["event_log"], load_event_log, FILES / "data" / "bpi2017.parquet")
+    event_log = record(["event_log"], load_event_log, project_files(HERE) / "data" / "bpi2017.parquet")
     return ACTIVITY, CASE_ID, TIMESTAMP, event_log, lcm
 
 
@@ -306,7 +411,8 @@ def _(ACTIVITY, CASE_ID, TIMESTAMP, lcm, pd):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MODE, mo):
+    mo.stop(MODE != "analyst")
     mo.md(r"""
     ## 1a. The schema of `A_Create Application`
 
@@ -385,7 +491,8 @@ def _(CASE_ID, application_figure, application_meta, event_log, mo, panel, show_
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MODE, mo):
+    mo.stop(MODE != "analyst")
     mo.md(r"""
     ## 1b. Missing values in that schema
 
@@ -422,7 +529,8 @@ def _(missing_values, mo, outside_schema, panel, show_table):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MODE, mo):
+    mo.stop(MODE != "analyst")
     mo.md(r"""
     ## 1c. Attributes re-used across activities
 
@@ -519,7 +627,8 @@ def _(credit_score_activities, credit_score_figure, mo, panel, show_chart):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MODE, mo):
+    mo.stop(MODE != "analyst")
     mo.md(r"""
     ## Map explorer
 
@@ -568,6 +677,58 @@ def _(case_activity_timestamp, draw_map, event_log, get_view, mo, record):
         name="draw_explorer_map",
     )
     mo.as_html(explorer_figure)
+    return
+
+
+@app.cell(hide_code=True)
+def _(MODE, adapter, get_cursor, mo, panel):
+    mo.stop(MODE != "reviewer")
+    # the whole analysis at the step the reviewer is on (the latest one until they step), each variable as it was
+    # bound then. There is no live analysis in this mode, so the snapshot is always of a recorded step.
+    snap = panel.snapshot(get_cursor() or adapter.latest_state_id())
+    mo.callout(mo.md(snap.banner()), kind="info")
+    return (snap,)
+
+
+@app.cell(hide_code=True)
+def _(MODE, mo, show, snap):
+    mo.stop(MODE != "reviewer")
+    _titles = {
+        "create_schema": "1a. The schema of `A_Create Application`",
+        "missing_values": "1b. Missing values in that schema",
+        "attribute_reuse": "1c. Attributes re-used across activities",
+    }
+    _parts = []
+    for _name, _title in _titles.items():
+        _frame = snap.get(_name)
+        _parts.append(mo.md(f"## {_title}"))
+        _parts.append(
+            show(mo.ui.table(_frame, selection=None, pagination=None), snap.state_id or "", _name, value=_frame)
+            if _frame is not None
+            else mo.md(snap.missing(_name))
+        )
+    mo.vstack(_parts)
+    return
+
+
+@app.cell(hide_code=True)
+def _(MODE, mo, show_chart, snap):
+    mo.stop(MODE != "reviewer")
+    _maps = {
+        "application_figure": ("map_application_states", "The application states, set-based map"),
+        "offer_id_figure": ("map_offer_id_carriers", "The events that carry `OfferID`"),
+        "credit_score_figure": ("map_credit_score_carriers", "The events that carry `CreditScore`"),
+    }
+    _parts = [mo.md("## Maps")]
+    for _variable, (_artifact, _title) in _maps.items():
+        _figure = snap.get(_variable)
+        _parts.append(mo.md(f"**{_title}**"))
+        _parts.append(
+            show_chart(mo.as_html(_figure), snap.state_id or "", _artifact, figure=_figure)
+            if _figure is not None
+            else mo.md(snap.missing(_variable))
+        )
+    mo.vstack(_parts)
     return
 
 
