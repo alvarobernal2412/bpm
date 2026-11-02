@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.3.0",
+#     "marimo-pmprov[pdf]>=0.3.1",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -114,6 +114,12 @@ def _():
 
     HISTORY_NAME = "BPI 2017 Task 1 with LCM maps"
 
+    class NotStored:
+        """Stands in for a value that was recorded but left out of the provenance zip to keep it small."""
+
+        def __repr__(self):
+            return "<not stored>"
+
     # pmprov warns that its cell rewriting is not active; the steps are recorded explicitly with record() below
     _warnings.filterwarnings("ignore", message=r"init_marimo\(\) was called but patch_marimo_ast_compile")
 
@@ -121,6 +127,7 @@ def _():
         DuckDBSQLiteBackend,
         HERE,
         HISTORY_NAME,
+        NotStored,
         PROVENANCE_DIR,
         Path,
         PmprovAdapter,
@@ -230,25 +237,7 @@ def _(
         # Resume the stored history without installing the kernel hooks of init_marimo(): a reviewer records nothing.
         rt = RuntimeTracker.resume(_storage, _history_id, session_id="reviewer")
 
-    def record(targets, function, *args, name=None, **kwargs):
-        """Run one analysis step and record it with pmprov.
-
-        pmprov normally records a notebook by rewriting its cells, which needs marimo to be started with a patch.
-        A platform such as molab starts marimo itself, so the steps are recorded explicitly instead: this runs
-        `function(*args, **kwargs)`, stores its inputs and the outputs under the names in `targets`, and returns the
-        result unchanged.
-        """
-        label = name or function.__name__
-        return rt.trace_step(
-            func=function,
-            func_name=label,
-            raw_line=f"{', '.join(targets)} = {label}(...)",
-            args=list(args),
-            kwargs=kwargs,
-            targets=list(targets),
-        )
-
-    return record, rt
+    return (rt,)
 
 
 @app.cell(hide_code=True)
@@ -298,32 +287,91 @@ def _(mo, panel):
 
 
 @app.cell(hide_code=True)
-def _(HERE, MODE, Path, mo, pd, project_files, record):
-    # Everything below that depends on the log is the analysis; a reviewer does not run it, it reads what was recorded.
-    mo.stop(MODE != "analyst")
+def _(MODE, NotStored, adapter, get_cursor, mo, panel, rt):
+    # Every analysis step below goes through record(...). In analyst mode it runs the step and records it. In reviewer
+    # mode it does not run anything: it hands back what that step produced at the step the reviewer is on, so each cell
+    # shows its own output as it was then, and a cell whose step has not happened yet shows nothing, like a replay.
+    if MODE == "analyst":
+        snap = None
+
+        def record(targets, function, *args, name=None, **kwargs):
+            """Run one analysis step and record it with pmprov.
+
+            pmprov normally records a notebook by rewriting its cells, which needs marimo to be started with a patch.
+            A platform such as molab starts marimo itself, so the steps are recorded explicitly instead: this runs
+            `function(*args, **kwargs)`, stores its inputs and the outputs under the names in `targets`, and returns the
+            result unchanged.
+            """
+            label = name or function.__name__
+            return rt.trace_step(
+                func=function,
+                func_name=label,
+                raw_line=f"{', '.join(targets)} = {label}(...)",
+                args=list(args),
+                kwargs=kwargs,
+                targets=list(targets),
+            )
+    else:
+        # the whole analysis at the step the reviewer is on (the latest one until they step); this cell re-runs, and
+        # with it every cell that uses record(), each time the stepper or a Replay moves the cursor
+        snap = panel.snapshot(get_cursor() or adapter.latest_state_id())
+
+        def record(targets, function, *args, name=None, **kwargs):
+            """The value(s) of `targets` at the reviewer's step; `function` and its arguments are not used."""
+            for target in targets:
+                mo.stop(snap.status(target) == "not_computed", mo.md(snap.missing(target)))
+            values = [snap.get(t) if snap.status(t) == "ok" else NotStored() for t in targets]
+            return values[0] if len(values) == 1 else tuple(values)
+
+    return record, snap
+
+
+@app.cell(hide_code=True)
+def _(MODE, mo, snap):
+    mo.stop(MODE != "reviewer")
+    mo.callout(mo.md(snap.banner()), kind="info")
+    return
+
+
+@app.cell(hide_code=True)
+def _(HERE, Path, pd, project_files, record):
     import lcm
 
     ACTIVITY = "concept:name"
     CASE_ID = "case:concept:name"
     TIMESTAMP = "time:timestamp"
 
-    def load_event_log(parquet_path):
-        """The BPI 2017 log as a DataFrame (Parquet copy of BPI_Challenge_2017.xes, all 19 columns)."""
+    def load_event_log(here):
+        """The BPI 2017 log as a DataFrame (Parquet copy of BPI_Challenge_2017.xes, all 19 columns).
+
+        The data is looked up (and downloaded on a platform that delivers only the notebook) here, so a reviewer, who
+        never runs this step, does not fetch it.
+        """
+        parquet_path = project_files(here) / "data" / "bpi2017.parquet"
         if not Path(parquet_path).exists():
             raise FileNotFoundError(
                 f"{parquet_path} is missing. Put the Parquet copy of the log in the data folder next to the notebook."
             )
         return pd.read_parquet(parquet_path)
 
-    event_log = record(["event_log"], load_event_log, project_files(HERE) / "data" / "bpi2017.parquet")
+    event_log = record(["event_log"], load_event_log, HERE)
     return ACTIVITY, CASE_ID, TIMESTAMP, event_log, lcm
 
 
 @app.cell(hide_code=True)
-def _(ACTIVITY, CASE_ID, event_log, mo):
+def _(ACTIVITY, CASE_ID, event_log, mo, record):
+    def summarise_log(log):
+        return {
+            "cases": int(log[CASE_ID].nunique()),
+            "events": len(log),
+            "activities": int(log[ACTIVITY].nunique()),
+            "columns": log.shape[1],
+        }
+
+    log_summary = record(["log_summary"], summarise_log, event_log)
     mo.md(f"""
-    **The log:** {event_log[CASE_ID].nunique():,} applications, {len(event_log):,} events,
-    {event_log[ACTIVITY].nunique()} activities, {event_log.shape[1]} columns. This is the full log, not the smaller one.
+    **The log:** {log_summary['cases']:,} applications, {log_summary['events']:,} events,
+    {log_summary['activities']} activities, {log_summary['columns']} columns. This is the full log, not the smaller one.
     """)
     return
 
@@ -411,8 +459,7 @@ def _(ACTIVITY, CASE_ID, TIMESTAMP, lcm, pd):
 
 
 @app.cell(hide_code=True)
-def _(MODE, mo):
-    mo.stop(MODE != "analyst")
+def _(mo):
     mo.md(r"""
     ## 1a. The schema of `A_Create Application`
 
@@ -451,6 +498,7 @@ def _(activities_starting_with, event_log, record):
 
 @app.cell(hide_code=True)
 def _(
+    CASE_ID,
     application_activities,
     case_activity_timestamp,
     draw_map,
@@ -467,15 +515,16 @@ def _(
         name="draw_application_map",
     )
     start_share = record(["start_share"], share_of_cases_starting_with, event_log, "A_Create Application")
-    return application_figure, application_meta, start_share
+    case_count = record(["case_count"], lambda log: int(log[CASE_ID].nunique()), event_log, name="count_cases")
+    return application_figure, application_meta, case_count, start_share
 
 
 @app.cell(hide_code=True)
-def _(CASE_ID, application_figure, application_meta, event_log, mo, panel, show_chart, start_share):
+def _(MODE, application_figure, application_meta, case_count, mo, panel, show_chart, start_share):
     _state = panel.latest_state_id or "analysis"
     mo.vstack([
         mo.md(
-            f"**Set-based map of the application states, all {event_log[CASE_ID].nunique():,} cases.** "
+            f"**Set-based map of the application states, all {case_count:,} cases.** "
             f"{start_share:.1f}% of the cases start with `A_Create Application`, so its schema is the one every case "
             f"enters the process with. The map has {application_meta['total_nodes']} nodes, "
             f"{application_meta['terminal_nodes']} of them where cases end."
@@ -484,15 +533,14 @@ def _(CASE_ID, application_figure, application_meta, event_log, mo, panel, show_
             mo.as_html(application_figure),
             artifact_id=_state,
             artifact_name="map_application_states",
-            figure=application_figure,
+            figure=application_figure if MODE == "analyst" else None,
         ),
     ])
     return
 
 
 @app.cell(hide_code=True)
-def _(MODE, mo):
-    mo.stop(MODE != "analyst")
+def _(mo):
     mo.md(r"""
     ## 1b. Missing values in that schema
 
@@ -529,8 +577,7 @@ def _(missing_values, mo, outside_schema, panel, show_table):
 
 
 @app.cell(hide_code=True)
-def _(MODE, mo):
-    mo.stop(MODE != "analyst")
+def _(mo):
     mo.md(r"""
     ## 1c. Attributes re-used across activities
 
@@ -578,7 +625,7 @@ def _(distinct_activities, draw_map, event_log, events_carrying, record):
 
 
 @app.cell(hide_code=True)
-def _(mo, offer_id_activities, offer_id_figure, offer_id_meta, panel, show_chart):
+def _(MODE, mo, offer_id_activities, offer_id_figure, offer_id_meta, panel, show_chart):
     _state = panel.latest_state_id or "analysis"
     mo.vstack([
         mo.md(
@@ -589,7 +636,7 @@ def _(mo, offer_id_activities, offer_id_figure, offer_id_meta, panel, show_chart
             mo.as_html(offer_id_figure),
             artifact_id=_state,
             artifact_name="map_offer_id_carriers",
-            figure=offer_id_figure,
+            figure=offer_id_figure if MODE == "analyst" else None,
         ),
     ])
     return
@@ -609,7 +656,7 @@ def _(distinct_activities, draw_map, event_log, events_carrying, record):
 
 
 @app.cell(hide_code=True)
-def _(credit_score_activities, credit_score_figure, mo, panel, show_chart):
+def _(MODE, credit_score_activities, credit_score_figure, mo, panel, show_chart):
     _state = panel.latest_state_id or "analysis"
     mo.vstack([
         mo.md(
@@ -620,15 +667,14 @@ def _(credit_score_activities, credit_score_figure, mo, panel, show_chart):
             mo.as_html(credit_score_figure),
             artifact_id=_state,
             artifact_name="map_credit_score_carriers",
-            figure=credit_score_figure,
+            figure=credit_score_figure if MODE == "analyst" else None,
         ),
     ])
     return
 
 
 @app.cell(hide_code=True)
-def _(MODE, mo):
-    mo.stop(MODE != "analyst")
+def _(mo):
     mo.md(r"""
     ## Map explorer
 
@@ -638,7 +684,8 @@ def _(MODE, mo):
 
 
 @app.cell(hide_code=True)
-def _(distinct_activities, event_log, mo):
+def _(MODE, distinct_activities, event_log, mo):
+    mo.stop(MODE != "analyst")
     _all_activities = distinct_activities(event_log)
     get_view, set_view = mo.state(None)
     explorer_activities = mo.ui.multiselect(options=_all_activities, value=[a for a in _all_activities if a.startswith("O_")], label="Activities")
@@ -676,59 +723,44 @@ def _(case_activity_timestamp, draw_map, event_log, get_view, mo, record):
         draw_map, explorer_log, _view["activities"], _view["builder"], _view["loops"], _view["empty"], 650,
         name="draw_explorer_map",
     )
-    mo.as_html(explorer_figure)
+    return explorer_figure, explorer_meta
+
+
+@app.cell(hide_code=True)
+def _(explorer_figure, explorer_meta, mo, panel, show_chart):
+    _state = panel.latest_state_id or "analysis"
+    _nodes = explorer_meta["total_nodes"]
+    mo.vstack([
+        mo.callout(
+            mo.md(
+                f"This map has **{_nodes:,} nodes**. A map this large is slow to draw, hover and annotate; "
+                "choose fewer activities or the set-based abstraction for a readable one."
+            ),
+            kind="warn",
+        ) if _nodes > 1000 else mo.md(f"{_nodes} nodes."),
+        show_chart(
+            mo.as_html(explorer_figure),
+            artifact_id=_state,
+            artifact_name="map_explorer",
+            figure=explorer_figure,
+        ),
+    ])
     return
 
 
 @app.cell(hide_code=True)
-def _(MODE, adapter, get_cursor, mo, panel):
+def _(MODE, mo, panel, show_chart, snap):
+    # the explorer's controls only exist in analyst mode; a reviewer sees the map the analyst last drew, as it was
     mo.stop(MODE != "reviewer")
-    # the whole analysis at the step the reviewer is on (the latest one until they step), each variable as it was
-    # bound then. There is no live analysis in this mode, so the snapshot is always of a recorded step.
-    snap = panel.snapshot(get_cursor() or adapter.latest_state_id())
-    mo.callout(mo.md(snap.banner()), kind="info")
-    return (snap,)
-
-
-@app.cell(hide_code=True)
-def _(MODE, mo, show, snap):
-    mo.stop(MODE != "reviewer")
-    _titles = {
-        "create_schema": "1a. The schema of `A_Create Application`",
-        "missing_values": "1b. Missing values in that schema",
-        "attribute_reuse": "1c. Attributes re-used across activities",
-    }
-    _parts = []
-    for _name, _title in _titles.items():
-        _frame = snap.get(_name)
-        _parts.append(mo.md(f"## {_title}"))
-        _parts.append(
-            show(mo.ui.table(_frame, selection=None, pagination=None), snap.state_id or "", _name, value=_frame)
-            if _frame is not None
-            else mo.md(snap.missing(_name))
-        )
-    mo.vstack(_parts)
-    return
-
-
-@app.cell(hide_code=True)
-def _(MODE, mo, show_chart, snap):
-    mo.stop(MODE != "reviewer")
-    _maps = {
-        "application_figure": ("map_application_states", "The application states, set-based map"),
-        "offer_id_figure": ("map_offer_id_carriers", "The events that carry `OfferID`"),
-        "credit_score_figure": ("map_credit_score_carriers", "The events that carry `CreditScore`"),
-    }
-    _parts = [mo.md("## Maps")]
-    for _variable, (_artifact, _title) in _maps.items():
-        _figure = snap.get(_variable)
-        _parts.append(mo.md(f"**{_title}**"))
-        _parts.append(
-            show_chart(mo.as_html(_figure), snap.state_id or "", _artifact, figure=_figure)
-            if _figure is not None
-            else mo.md(snap.missing(_variable))
-        )
-    mo.vstack(_parts)
+    mo.stop(snap.status("explorer_figure") != "ok", mo.md(snap.missing("explorer_figure")))
+    mo.vstack([
+        mo.md(f"{snap.get('explorer_meta')['total_nodes']:,} nodes."),
+        show_chart(
+            mo.as_html(snap.get("explorer_figure")),
+            artifact_id=panel.latest_state_id or "analysis",
+            artifact_name="map_explorer",
+        ),
+    ])
     return
 
 
