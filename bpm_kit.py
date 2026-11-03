@@ -271,6 +271,10 @@ def reviewer_recorder(snap, mo):
         return values[0] if len(values) == 1 else tuple(values)
 
     def state_of(target):
-        return snap.state_id or "analysis"
+        # The step the reviewer is on is the id of what that step produced, so the panel can flash it when the reviewer steps to it.
+        # What an earlier step produced keeps a different id and is not flashed.
+        if getattr(snap, "produced_here", lambda _: False)(target):  # an older marimo-pmprov has no highlight of steps
+            return snap.state_id
+        return f"{snap.state_id}-earlier" if snap.state_id else "analysis"
 
     return record, state_of
