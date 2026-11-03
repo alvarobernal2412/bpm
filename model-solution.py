@@ -118,15 +118,13 @@ def _(DuckDBSQLiteBackend, RuntimeTracker, Sync, kit, mo, relocate_artifacts):
     # the student notebook under this key, and its course was then closed, so nothing can be saved over it any more. This key can
     # only read it.
     import os as _os
-    import shutil as _shutil
     import tempfile as _tempfile
     from pathlib import Path as _Path
 
     _url = _os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com")
     _key = "model-solution-tutorial-7bmavmds"
-    _folder = _Path(_tempfile.gettempdir()) / "bpm-model-solution"
-    _shutil.rmtree(_folder, ignore_errors=True)  # always the stored copy, never an older download
-    (_folder / "artifacts").mkdir(parents=True)
+    _folder = _Path(_tempfile.mkdtemp(prefix="bpm-model-solution-"))  # a new folder each run: always the stored copy
+    (_folder / "artifacts").mkdir()
     _sync = Sync(_url, _key, _folder)
     _outcome = _sync.restore()
     mo.stop(
