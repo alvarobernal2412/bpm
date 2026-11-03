@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.3.1",
+#     "marimo-pmprov[pdf]>=0.4.2",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -21,25 +21,26 @@ app = marimo.App(width="full")
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # BPI Challenge 2017, Task 1: Schemas
+    # Loan applications: what do we know about a new application?
 
-    One notebook, two modes.
+    You will explore a real event log of a bank's loan approval process (BPI Challenge 2017: 31,509 applications, 1.2 million
+    events) with process maps, and write down what you find.
 
-    - **Analyst** answers the three questions of the first exploratory task on the **whole** log
-      (31,509 applications, 1.2 million events) with the maps of the
-      [Linear Continuous Process Mapper](https://github.com/alvarobernal2412/lc-maps), and records every analysis step with
-      `pmprov`. In the sidebar you can **Pick** a map or a table as the target of a note, write the note, and
-      **Export PDF** for the report.
-    - **Reviewer** opens the provenance an analyst recorded and **only reads it**: nothing is recorded and nothing can be
-      edited. Step through the analysis with the replay stepper, or press **Replay** on a note to jump to its step; the
-      maps and tables are restored as they were at that step, and the element the note is about is highlighted.
+    **How to use this notebook**
 
-    1. Which data schema is associated with the activity `A_Create Application`?
-    2. Which attributes of this schema have missing values?
-    3. Does the log have any attribute that is re-used across different activities?
+    1. Enter your key below. If you worked here before, your earlier work comes back by itself.
+    2. Read each question, look at the table or the map, and answer in the side panel: press **Pick**, click the table or map
+       you mean, write your note and press **Add**.
+    3. Your work is saved automatically. You can close this page and come back with the same key.
 
-    A map shows the order of activities, not attributes. To use it for an attribute question, the log is first reduced
-    to the events that carry the attribute: the activities in such a map are exactly the activities that carry it.
+    **The three questions**
+
+    1. Which data (attributes) does the first activity, `A_Create Application`, carry?
+    2. Which of those attributes are sometimes empty?
+    3. Is any attribute used by more than one activity?
+
+    A map shows the order of activities, not attributes. To use a map for an attribute question, we first keep only the
+    events that carry that attribute: the activities in such a map are exactly the activities that carry it.
     """)
     return
 
@@ -48,9 +49,13 @@ def _(mo):
 def _():
     import marimo as mo
     import pandas as pd
+    import hashlib as _hashlib
     import os as _os
     import tempfile as _tempfile
     from pathlib import Path
+
+    import anywidget
+    import traitlets
 
     import warnings as _warnings
 
@@ -61,6 +66,8 @@ def _():
     from provenance_widget.widget import ProvenancePanel
     from provenance_widget.display import show, show_chart, show_table
     from provenance_widget.portable import relocate_artifacts, unpack_provenance, zip_provenance
+    from provenance_widget.repeats import describe_run
+    from provenance_widget.sync import Sync
 
     def _folder_of_this_notebook():
         # mo.notebook_location() is the folder of the notebook; if a platform returns something else, use the
@@ -102,15 +109,61 @@ def _():
                     destination.write_bytes(archive.read(member))
         return target
 
-    # Where the provenance is stored: ./provenance next to the notebook, or PMPROV_DIR. If that folder cannot be
-    # written (read-only project), a temporary folder is used so the notebook still runs.
-    _wanted = Path(_os.environ.get("PMPROV_DIR") or HERE / "provenance")
-    try:
-        (_wanted / "artifacts").mkdir(parents=True, exist_ok=True)
-        PROVENANCE_DIR = _wanted
-    except OSError:
-        PROVENANCE_DIR = Path(_tempfile.mkdtemp(prefix="bpm-provenance-"))
-        (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
+    # The course server that keeps each student's work. Set PMPROV_SYNC_URL to another address, or to an empty value to
+    # work without a server (the work then stays in ./provenance next to the notebook).
+    SYNC_URL = _os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com")
+
+    def session_folder(key):
+        """Where this student's work lives while the notebook runs: one folder per key, so students who share a hosted
+        notebook never write into each other's provenance."""
+        return Path(_tempfile.gettempdir()) / "bpm-provenance" / _hashlib.sha256(key.encode()).hexdigest()[:16]
+
+    class KeyBox(anywidget.AnyWidget):
+        """A field for the student's key. The key is kept in this browser (not in the notebook, which a fork copies)."""
+
+        key = traitlets.Unicode("").tag(sync=True)
+        _esm = """
+        export default {
+          render({ model, el }) {
+            const STORE = "bpm-course-key";
+            const row = document.createElement("div");
+            row.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+            const input = document.createElement("input");
+            input.type = "password";
+            input.autocomplete = "off";
+            input.placeholder = "Paste your key here";
+            input.style.cssText = "flex:1 1 320px;padding:8px 10px;font-size:14px;border:1px solid #94a3b8;border-radius:6px";
+            const start = document.createElement("button");
+            start.textContent = "Start";
+            start.style.cssText = "padding:8px 18px;font-size:14px;border:0;border-radius:6px;background:#0ea5e9;color:#fff;cursor:pointer";
+            const label = document.createElement("label");
+            label.style.cssText = "font-size:12px;color:#64748b;display:flex;gap:4px;align-items:center";
+            const remember = document.createElement("input");
+            remember.type = "checkbox";
+            remember.checked = true;
+            label.append(remember, "Remember on this computer");
+            const other = document.createElement("button");
+            other.textContent = "Use another key";
+            other.style.cssText = "display:none;padding:4px 10px;font-size:12px;border:1px solid #94a3b8;border-radius:6px;background:transparent;cursor:pointer";
+            const keep = (value) => {
+              try { if (value && remember.checked) localStorage.setItem(STORE, value); else localStorage.removeItem(STORE); } catch (e) {}
+            };
+            const send = (value) => {
+              model.set("key", value);
+              model.save_changes();
+              other.style.display = value ? "inline-block" : "none";
+            };
+            start.onclick = () => { const v = input.value.trim(); if (v) { keep(v); send(v); } };
+            input.onkeydown = (e) => { if (e.key === "Enter") start.onclick(); };
+            other.onclick = () => { try { localStorage.removeItem(STORE); } catch (e) {} input.value = ""; send(""); };
+            row.append(input, start, label, other);
+            el.append(row);
+            let stored = "";
+            try { stored = localStorage.getItem(STORE) || ""; } catch (e) {}
+            if (stored) { input.value = stored; send(stored); }
+          },
+        };
+        """
 
     HISTORY_NAME = "BPI 2017 Task 1 with LCM maps"
 
@@ -127,17 +180,21 @@ def _():
         DuckDBSQLiteBackend,
         HERE,
         HISTORY_NAME,
+        KeyBox,
         NotStored,
-        PROVENANCE_DIR,
         Path,
         PmprovAdapter,
         ProvenancePanel,
         RuntimeTracker,
+        SYNC_URL,
+        Sync,
+        describe_run,
         init_marimo,
         mo,
         pd,
         project_files,
         relocate_artifacts,
+        session_folder,
         show,
         show_chart,
         show_table,
@@ -155,7 +212,11 @@ def _(mo):
     MODE_GIVEN = mo.cli_args().get("mode") or _os.environ.get("PMPROV_MODE") or None
     if MODE_GIVEN not in (None, "analyst", "reviewer"):
         raise ValueError(f"mode must be 'analyst' or 'reviewer', not {MODE_GIVEN!r}")
-    mode_switch = mo.ui.radio(options=["analyst", "reviewer"], value="analyst", inline=True, label="Mode")
+    mode_switch = mo.ui.radio(
+        options={"Work on the analysis": "analyst", "Look back through my work": "reviewer"},
+        value="Work on the analysis",
+        inline=True,
+    )
     return MODE_GIVEN, mode_switch
 
 
@@ -164,7 +225,7 @@ def _(MODE_GIVEN, mo, mode_switch):
     mo.callout(
         mo.md(f"Mode: **{MODE_GIVEN}** (chosen before the run).")
         if MODE_GIVEN
-        else mo.hstack([mode_switch, mo.md("Choose how to use this notebook; you can switch at any time.")], justify="start", gap=2),
+        else mo.hstack([mode_switch, mo.md("You can switch at any time.")], justify="start", gap=2),
         kind="info",
     )
     return
@@ -174,6 +235,33 @@ def _(MODE_GIVEN, mo, mode_switch):
 def _(MODE_GIVEN, mode_switch):
     MODE = MODE_GIVEN or mode_switch.value
     return (MODE,)
+
+
+@app.cell(hide_code=True)
+def _(KeyBox, SYNC_URL, mo):
+    key_box = mo.ui.anywidget(KeyBox()) if SYNC_URL else None
+    mo.vstack([mo.md("### Your key"), key_box]) if key_box else mo.md("*Working without a server: your work stays in this notebook's folder.*")
+    return (key_box,)
+
+
+@app.cell(hide_code=True)
+def _(HERE, Path, SYNC_URL, Sync, key_box, mo, session_folder):
+    # With a server, nothing starts until there is a key; then the student's earlier work is brought back before
+    # anything opens the provenance database.
+    import os as _os
+
+    sync = None
+    if SYNC_URL:
+        _key = (key_box.value.get("key") or "").strip()
+        mo.stop(not _key, mo.callout(mo.md("Enter your key above to start."), kind="info"))
+        PROVENANCE_DIR = session_folder(_key)
+        sync = Sync(SYNC_URL, _key, PROVENANCE_DIR)
+        sync.restore()
+        mo.stop(sync.status.state == "unauthorized", mo.callout(mo.md(sync.status.message), kind="danger"))
+    else:
+        PROVENANCE_DIR = Path(_os.environ.get("PMPROV_DIR") or HERE / "provenance")
+    (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
+    return PROVENANCE_DIR, sync
 
 
 @app.cell(hide_code=True)
@@ -251,14 +339,11 @@ def _(MODE, PROVENANCE_DIR, mo, rt, zip_provenance):
         return data
 
     mo.vstack([
-        mo.callout(mo.md(f"Provenance is stored in `{PROVENANCE_DIR}`."), kind="info"),
         mo.md(
-            "A hosted notebook keeps its own files, so take the provenance with you before you close it: "
-            "download it here, then drop `provenance.zip` into this notebook in reviewer mode (or unzip it next to "
-            "the notebook on your own machine). The file keeps every step and note and the tables and maps; a stored "
-            "value over 2 MB, such as a copy of the whole log, is left out so the file stays small."
+            "Your work is saved for you. If you also want a copy on your own computer, download it here "
+            "(it keeps every step, note, table and map, and is small)."
         ),
-        mo.download(data=provenance_zip, filename="provenance.zip", label="Download provenance.zip"),
+        mo.download(data=provenance_zip, filename="provenance.zip", label="Download a copy of my work"),
     ])
     return
 
@@ -287,31 +372,92 @@ def _(mo, panel):
 
 
 @app.cell(hide_code=True)
+def _(MODE, mo, rt, sync):
+    # saving starts once the history is open, and goes on a few seconds after every change
+    if sync is not None and MODE == "analyst":
+        sync.settle = lambda: rt.storage._executor.submit(lambda: None).result()
+        sync.start()
+    save_tick = mo.ui.refresh(default_interval="5s", label="")
+    return (save_tick,)
+
+
+@app.cell(hide_code=True)
+def _(adapter, describe_run, mo, save_tick, sync):
+    save_tick  # runs again every few seconds
+    _parts = []
+    if sync is not None:
+        _kind = {"saved": "success", "idle": "neutral", "pending": "info"}.get(sync.status.state, "warn")
+        _parts.append(mo.callout(mo.md(sync.status.message), kind=_kind))
+    _runs = adapter.repeated_runs()
+    if _runs:
+        _parts.append(
+            mo.callout(
+                mo.md(
+                    "Some steps of your analysis ran more than once. "
+                    + " ".join(describe_run(r) for r in _runs)
+                    + " Nothing was removed; this is only a note."
+                ),
+                kind="warn",
+            )
+        )
+    mo.vstack(_parts + ([save_tick] if save_tick is not None else []))
+    return
+
+
+@app.cell(hide_code=True)
 def _(MODE, NotStored, adapter, get_cursor, mo, panel, rt):
     # Every analysis step below goes through record(...). In analyst mode it runs the step and records it. In reviewer
     # mode it does not run anything: it hands back what that step produced at the step the reviewer is on, so each cell
     # shows its own output as it was then, and a cell whose step has not happened yet shows nothing, like a replay.
     if MODE == "analyst":
+        from tracker.runtime import _param_fingerprint
+
         snap = None
         produced = {}  # target name -> the state of the step that produced it
 
-        def record(targets, function, *args, name=None, **kwargs):
+        # The notebook runs again from the top whenever the page is opened, the kernel restarts or the mode is switched
+        # back. That run repeats the stored history from its first step, and those steps are not recorded a second time:
+        # a call is skipped only while it is the very next step of the stored history (same name, same inputs). The first
+        # call that is not ends this, and from then on every step is recorded, so a step a student repeats on purpose
+        # is a new step.
+        replay = {"on": True, "at": rt._root_state_id, "head": rt._current_state_id}
+
+        def _stored_step(label, args, kwargs):
+            """The stored step that this call repeats, or None."""
+            try:
+                fingerprint = _param_fingerprint(list(args), kwargs)
+                for child in rt.storage.load_child_steps(replay["at"]):
+                    if child["func_name"] == label and child["param_fingerprint"] == fingerprint:
+                        return child
+            except Exception:
+                pass  # when in doubt, record the step
+            return None
+
+        def record(targets, function, *args, name=None, replay_stored=True, **kwargs):
             """Run one analysis step and record it with pmprov.
 
             pmprov normally records a notebook by rewriting its cells, which needs marimo to be started with a patch.
             A platform such as molab starts marimo itself, so the steps are recorded explicitly instead: this runs
             `function(*args, **kwargs)`, stores its inputs and the outputs under the names in `targets`, and returns the
-            result unchanged.
+            result unchanged. `replay_stored=False` is for a step a student asks for (a click), which is always recorded.
             """
             label = name or function.__name__
-            result = rt.trace_step(
-                func=function,
-                func_name=label,
-                raw_line=f"{', '.join(targets)} = {label}(...)",
-                args=list(args),
-                kwargs=kwargs,
-                targets=list(targets),
-            )
+            stored = _stored_step(label, args, kwargs) if replay["on"] and replay_stored else None
+            if stored is not None:
+                result = function(*args, **kwargs)
+                replay["at"] = rt._current_state_id = stored["output_state_id"]
+            else:
+                if replay["on"]:
+                    replay["on"] = False
+                    rt._current_state_id = replay["head"]  # new work goes after the end of the stored history
+                result = rt.trace_step(
+                    func=function,
+                    func_name=label,
+                    raw_line=f"{', '.join(targets)} = {label}(...)",
+                    args=list(args),
+                    kwargs=kwargs,
+                    targets=list(targets),
+                )
             for target in targets:
                 produced[target] = rt._current_state_id
             return result
@@ -324,7 +470,7 @@ def _(MODE, NotStored, adapter, get_cursor, mo, panel, rt):
         # with it every cell that uses record(), each time the stepper or a Replay moves the cursor
         snap = panel.snapshot(get_cursor() or adapter.latest_state_id())
 
-        def record(targets, function, *args, name=None, **kwargs):
+        def record(targets, function, *args, name=None, replay_stored=True, **kwargs):
             """The value(s) of `targets` at the reviewer's step; `function` and its arguments are not used."""
             for target in targets:
                 mo.stop(snap.status(target) == "not_computed", mo.md(snap.missing(target)))
@@ -728,11 +874,11 @@ def _(case_activity_timestamp, draw_map, event_log, get_view, mo, record):
     _view = get_view()
     mo.stop(_view is None, mo.md("*Choose the activities, then click Refresh.*"))
 
-    explorer_log = record(["explorer_log"], case_activity_timestamp, event_log)
+    explorer_log = record(["explorer_log"], case_activity_timestamp, event_log, replay_stored=False)
     explorer_figure, explorer_meta = record(
         ["explorer_figure", "explorer_meta"],
         draw_map, explorer_log, _view["activities"], _view["builder"], _view["loops"], _view["empty"], 650,
-        name="draw_explorer_map",
+        name="draw_explorer_map", replay_stored=False,
     )
     return explorer_figure, explorer_meta
 
