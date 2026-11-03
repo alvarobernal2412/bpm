@@ -11,14 +11,12 @@ from PyPI as `linear-continuous-process-mapper`), annotated with
 | Notebook | For | What it does |
 |---|---|---|
 | [`student-notebook.py`](student-notebook.py) | students | Analyst only. The student enters their **key**, takes a first look at the log, explores it with the map tools, and writes notes on the tables and maps. Work is saved to the course server under the key and comes back on the next visit. No code to change, and no way to switch to the reviewer. |
-| [`model-solution.py`](model-solution.py) | everyone, after their own attempt | Reviewer only. A tutorial that **replays** a recorded, annotated analysis of the same questions: step through it, press **Replay** on a note to jump to its step. Nothing can be changed and nothing is recorded. |
+| [`model-solution.py`](model-solution.py) | everyone, after their own attempt | Reviewer only. A tutorial that **replays** an annotated analysis of the same questions, read from the course server: step through it, press **Replay** on a note to jump to its step. Nothing can be changed and nothing is recorded. |
 
 | File | |
 |---|---|
 | `bpm_kit.py` | The code both notebooks share: the analysis steps, the key box and how a step is recorded. |
-| `tools/make_model_solution.py` | Records the model analysis and writes its notes. |
 | `data/bpi2017.parquet` | The whole log (31,509 applications, 1,202,267 events, 19 columns), 25 MB. A copy of `BPI_Challenge_2017.xes`. |
-| `data/model-solution/provenance.zip` | The recorded model solution that `model-solution.py` replays (about 140 kB). |
 | `assignment.md` | The assignment: context, the three questions, how to work. |
 
 Each notebook starts with a `# /// script` header that lists its dependencies, so molab (or `marimo --sandbox`) builds the
@@ -32,7 +30,7 @@ molab opens a notebook straight from a GitHub URL. For students, open the first 
 - Model solution: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/model-solution.py
 
 molab delivers **only the notebook file**. So each notebook downloads what else it needs from this repository when it starts
-(`bpm_kit.py`, and the log or the model solution), from `raw.githubusercontent.com/alvarobernal2412/bpm/main/`. That follows
+(`bpm_kit.py`, and the log), from `raw.githubusercontent.com/alvarobernal2412/bpm/main/`. That follows
 `main`, not a fixed version, and needs internet access from the notebook. On your own machine, with the folder checked out,
 nothing is downloaded.
 
@@ -46,20 +44,18 @@ instructor reads the work on the server's `/viewer` page, course by course.
 `PMPROV_SYNC_URL` points the notebook at another server; set it to an empty value to work without one, and the work then stays in
 `provenance/` next to the notebook.
 
-## Making the model solution again
+## The model solution
 
-Change a step or a note in `tools/make_model_solution.py` and run it:
+The model solution is not a file of this repository. It is an analysis stored on the course server, in the course `tutorial`, as
+the work of a student called `model-solution`. It was made like any student's work: with the tools of the student notebook (the
+first look, the attributes of an activity, the map explorer), under that student's key, with notes written on the tables and maps.
+Then the course was **closed**: after its closing time the server refuses every save and keeps what was saved, so the solution
+cannot be overwritten, and anyone with the key can still read it. `model-solution.py` holds that key (it can only read), downloads
+the work and replays it in the reviewer.
 
-```
-uv run --python 3.13 --with marimo --with "pmprov[duckdb,parquet,graph]>=0.10" --with "marimo-pmprov[pdf]>=0.4.2" \
-    --with linear-continuous-process-mapper --with plotly --with kaleido --with networkx --with pandas \
-    python tools/make_model_solution.py
-```
-
-It runs the steps through the same `record()` the student notebook uses, so the history is the one a student would produce, and
-writes `data/model-solution/provenance.zip`. The notes are attached to the table or map that answers each question, the way the
-annotated examples of the course do. `model-solution.py` needs a change only when a step is added or renamed. The recording keeps
-no path of the machine it was made on.
+To change the solution: reopen the course on the server's `/keys` page, work in the student notebook with the model-solution key,
+and close the course again. The stored work is kept in an old database file format that every DuckDB reads, because molab's DuckDB
+is older than the one a recent pmprov writes. Work saved by a recent DuckDB may not open on molab until it is converted.
 
 ## How steps are recorded
 
@@ -78,7 +74,7 @@ them on the dataset page before reusing it.
 
 ## Things to know
 
-- **Tested locally**: both notebooks run; the model solution steps and replays its notes; the student notebook records its first
+- **Tested locally**: both notebooks run; the model solution is fetched from the course server and replays its notes; the student notebook records its first
   look and every map a student asks for, a reload adds no duplicate steps, and with a local copy of the course server the key flow
   works, including restoring the work after the local folder was deleted. **Not yet tested on molab itself.**
 - A student's `provenance.zip` (the download button) keeps every step, note, table and map and leaves out stored values over 500 kB
