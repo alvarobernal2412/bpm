@@ -20,15 +20,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import duckdb  # noqa: E402
 import bpm_kit as kit  # noqa: E402
 import tracker.runtime as _tracker_runtime  # noqa: E402
 from provenance_widget.pmprov_adapter import PmprovAdapter  # noqa: E402
 from provenance_widget.portable import zip_provenance  # noqa: E402
 from tracker.runtime import RuntimeTracker  # noqa: E402
-from tracker.storage import DuckDBSQLiteBackend  # noqa: E402
+from tracker.storage import DuckDBSQLiteBackend, _connect_lock  # noqa: E402
 
 OUTPUT = ROOT / "data" / "model-solution" / "provenance.zip"
 AUTHOR = "Model solution"
+PORTABLE_STORAGE_VERSION = "v1.0.0"  # the oldest DuckDB file format: read by every DuckDB from 1.0 on
 
 # one colour per kind of note, so the sidebar can be read at a glance
 COLORS = {"first look": "#64748B", "1a": "#0EA5E9", "1b": "#F59E0B", "1c": "#10B981", "finding": "#A855F7"}
@@ -178,6 +180,18 @@ def main(output: Path = OUTPUT) -> None:
             },
         )
     adapter.settle()
+
+    # pmprov pins the newest DuckDB, whose files an older DuckDB refuses to open ("version number 999"), and a hosted notebook may
+    # run an older one. The shipped history is therefore copied into a database of the oldest format: every DuckDB can read it.
+    with _connect_lock:
+        _convert = duckdb.connect()
+        _convert.execute("ATTACH 'provenance.db' AS source (READ_ONLY)")
+        _convert.execute(f"ATTACH 'portable.db' AS target (STORAGE_VERSION '{PORTABLE_STORAGE_VERSION}')")
+        _convert.execute("COPY FROM DATABASE source TO target")
+        _convert.close()
+    for _name in ("provenance.db", "provenance.db.wal", "portable.db.wal"):
+        (work / _name).unlink(missing_ok=True)
+    (work / "portable.db").rename(work / "provenance.db")
 
     data, left_out = zip_provenance(work)
     os.chdir(ROOT)
