@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.4.2",
+#     "marimo-pmprov[pdf]>=0.4.3",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -24,9 +24,9 @@ def _(mo):
     # Model solution: what does a loan application carry?
 
     This tutorial shows one way to answer the first exploratory task of the assignment on the **BPI Challenge 2017** event log
-    (a bank's loan applications, 31,509 of them). It is a **replay**: everything you see was done in the notebook you work in
-    yourself, step by step, and recorded. Each table and map below is one recorded step, and the notes in the side panel were
-    written on the output they explain.
+    (a bank's loan applications, 31,509 of them). It is a **replay**: everything you see was done with the tools of the student
+    notebook, step by step, and recorded on the course server. Each table and map below is one recorded step, and the notes in the
+    side panel were written on the output they explain.
 
     **The three questions** (the full assignment, with the background of the log, is in `assignment.md`)
 
@@ -59,7 +59,8 @@ def _():
     from provenance_widget.pmprov_adapter import PmprovAdapter
     from provenance_widget.widget import ProvenancePanel
     from provenance_widget.display import show_chart, show_table
-    from provenance_widget.portable import relocate_artifacts, unpack_provenance
+    from provenance_widget.portable import relocate_artifacts
+    from provenance_widget.sync import Sync
 
     def _folder_of_this_notebook():
         # mo.notebook_location() is the folder of the notebook; if a platform returns something else, use the
@@ -103,27 +104,45 @@ def _():
         RuntimeTracker,
         kit,
         mo,
+        Sync,
         project_file,
         relocate_artifacts,
         show_chart,
         show_table,
-        unpack_provenance,
     )
 
 
 @app.cell(hide_code=True)
-def _(DuckDBSQLiteBackend, RuntimeTracker, kit, mo, project_file, relocate_artifacts, unpack_provenance):
-    # The recorded analysis ships with the project as one small zip. It is unpacked into a fresh folder and read, never written.
+def _(DuckDBSQLiteBackend, RuntimeTracker, Sync, kit, mo, relocate_artifacts):
+    # The solution is an analysis stored on the course server, read exactly as a student's own work is: it was made with the tools of
+    # the student notebook under this key, and its course was then closed, so nothing can be saved over it any more. This key can
+    # only read it.
+    import os as _os
     import shutil as _shutil
     import tempfile as _tempfile
     from pathlib import Path as _Path
 
+    _url = _os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com")
+    _key = "model-solution-tutorial-7bmavmds"
     _folder = _Path(_tempfile.gettempdir()) / "bpm-model-solution"
-    _shutil.rmtree(_folder, ignore_errors=True)
-    unpack_provenance(project_file("data/model-solution/provenance.zip", refresh=True).read_bytes(), _folder)
+    _shutil.rmtree(_folder, ignore_errors=True)  # always the stored copy, never an older download
+    (_folder / "artifacts").mkdir(parents=True)
+    _sync = Sync(_url, _key, _folder)
+    _outcome = _sync.restore()
+    mo.stop(
+        _outcome != "restored",
+        mo.callout(
+            mo.md(
+                "The model solution could not be loaded from the course server"
+                + (f": {_sync.status.message}" if _sync.status.message else ".")
+                + " Check your connection and run the notebook again."
+            ),
+            kind="danger",
+        ),
+    )
     relocate_artifacts(_folder / "provenance.db", _folder / "artifacts")
     _storage = DuckDBSQLiteBackend(db_path=_folder / "provenance.db", artifact_dir=_folder / "artifacts")
-    _history = _storage.find_latest_history_by_name(kit.SOLUTION_HISTORY_NAME)
+    _history = _storage.find_latest_history_by_name(kit.HISTORY_NAME)
     mo.stop(_history is None, mo.callout(mo.md("The recorded solution could not be found."), kind="danger"))
     # resume the stored history without recording anything: this notebook only reads
     rt = RuntimeTracker.resume(_storage, _history, session_id="reviewer")
@@ -238,17 +257,14 @@ def _(event_log, kit, mo, record, show_table, state_of):
 def _(event_log, kit, mo, record, show_table, state_of):
     sample = record(["log_sample"], kit.log_sample, event_log, 100)
     _state = state_of("log_sample")
-    mo.vstack([
-        mo.md(
-            "**The first events, as they are stored.** The offer columns (`OfferID`, `CreditScore`, ...) are empty here, as they are "
-            "on most rows of the log. Scroll sideways and look at which columns have values."
-        ),
-        show_table(
-            mo.ui.table(sample, selection=None, page_size=10),
-            artifact_id=_state,
-            artifact_name="log_sample",
-        ),
-    ])
+    _intro = mo.md(
+        "**The first events, as they are stored.** The offer columns (`OfferID`, `CreditScore`, ...) are empty here, as they are "
+        "on most rows of the log. Scroll sideways and look at which columns have values."
+    )
+    # a table too wide to be kept with the analysis is not stored; the student notebook shows it
+    mo.vstack([_intro, show_table(
+        mo.ui.table(sample, selection=None, page_size=10), artifact_id=_state, artifact_name="log_sample",
+    ) if not isinstance(sample, kit.NotStored) else mo.callout(mo.md("This table is not kept with the recorded analysis. Run the student notebook to see it."), kind="neutral")])
     return
 
 
@@ -259,7 +275,40 @@ def _(mo):
     (`OfferID`, `CreditScore`, `OfferedAmount`, ...) have a value on only a few percent of the events. So the data an event carries
     depends on *which activity it is*. That is exactly what the three questions ask about.
 
-    ## 1. Reading the process with maps
+    ## 1. Which attributes does an activity carry?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(event_log, kit, mo, record, show_table, state_of):
+    coverage = record(["coverage"], kit.attribute_coverage, event_log, None)
+    _state = state_of("coverage")
+    _carried = int((coverage["events with a value"] > 0).sum())
+    mo.vstack([
+        mo.md(
+            "**The attributes of one activity.** For each attribute, how many of **one activity's** events have a value. The attributes "
+            f"with at least one value are what that activity carries: here {_carried} of {len(coverage)}. The first activity looked at "
+            "is `A_Create Application`, later `O_Create Offer`: step through the analysis to see each."
+        ),
+        show_table(
+            mo.ui.table(coverage, selection=None, pagination=None),
+            artifact_id=_state,
+            artifact_name="attributes_of_activity",
+        ),
+    ])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    **Answers to 1a and 1b.** For `A_Create Application` eleven attributes have a value: eight describe *any* event (who did it,
+    when, which event it is) and three describe the *loan application* itself (`LoanGoal`, `ApplicationType`, `RequestedAmount`).
+    **None** of them is ever empty on this activity. The others are empty here, but they are not part of its schema, so that is not
+    a *missing* value: they are offer attributes.
+
+    ## 2. Reading the process with maps
 
     A table cannot show **order**. For that we use a *process map* of the Linear Continuous Process Mapper (LC map). It draws
     every case as a path from left to right; cases that behave alike share a path, and the **width of a band** is the number of
@@ -268,61 +317,30 @@ def _(mo):
     The map comes in three abstractions. We use the **set-based** one: a node stands for the *set* of activities a case has done so
     far, whatever the order, which keeps the map small and readable.
 
-    A map shows the order of activities, **not attributes**. To use one for an attribute question we will later reduce the log to the
-    events that carry the attribute: the activities in such a map are then exactly the activities that carry it.
+    A map shows the order of activities, **not attributes**. To use one for an attribute question we reduce the log to the events
+    that carry the attribute: the activities in such a map are then exactly the activities that carry it.
 
-    First, the map of the application states (the `A_` activities) over all cases.
+    The maps below were drawn one after another with the map explorer of the student notebook; the cell shows the one the analysis
+    has reached. The first is the map of the application states (`A_`), then the offer states (`O_`), then the events that carry
+    `OfferID`, then the events that carry `CreditScore`. Move the arrows of the side panel to see each of them.
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _(event_log, kit, mo, record, show_chart, state_of):
-    activity_log = record(["activity_log"], kit.case_activity_timestamp, event_log)
-    application_activities = record(["application_activities"], kit.activities_starting_with, event_log, "A_")
-    application_figure, application_meta = record(
-        ["application_figure", "application_meta"],
-        kit.draw_map, activity_log, application_activities, "set_based", True, True, 650,
-        name="draw_application_map",
+    explorer_log = record(["explorer_log"], kit.case_activity_timestamp, event_log)
+    explorer_figure, explorer_meta = record(
+        ["explorer_figure", "explorer_meta"], kit.draw_map, explorer_log, None, "set_based", True, True, 650,
+        name="draw_explorer_map",
     )
-    start_share = record(["start_share"], kit.share_of_cases_starting_with, event_log, "A_Create Application")
-    case_count = record(["case_count"], kit.count_cases, event_log)
-    _state = state_of("application_figure")
+    _state = state_of("explorer_figure")
     mo.vstack([
-        mo.md(
-            f"**Set-based map of the application states, all {case_count:,} cases.** "
-            f"{start_share:.1f}% of the cases start with `A_Create Application`. The map has {application_meta['total_nodes']} nodes, "
-            f"{application_meta['terminal_nodes']} of them where cases end."
-        ),
+        mo.md(f"**Set-based map at this step.** {explorer_meta['total_nodes']} nodes, {explorer_meta['terminal_nodes']} of them where cases end."),
         show_chart(
-            mo.as_html(application_figure),
+            mo.as_html(explorer_figure),
             artifact_id=_state,
-            artifact_name="map_application_states",
-            figure=None,
-        ),
-    ])
-    return activity_log, application_activities, case_count, start_share
-
-
-@app.cell(hide_code=True)
-def _(activity_log, event_log, kit, mo, record, show_chart, state_of):
-    offer_activities = record(["offer_activities"], kit.activities_starting_with, event_log, "O_")
-    offer_figure, offer_meta = record(
-        ["offer_figure", "offer_meta"],
-        kit.draw_map, activity_log, offer_activities, "set_based", True, True, 650,
-        name="draw_offer_map",
-    )
-    _state = state_of("offer_figure")
-    mo.vstack([
-        mo.md(
-            f"**The same kind of map for the offer states (`O_`).** {offer_meta['total_nodes']} nodes. Offers are a second, separate "
-            "process: an application can have several offers, and each follows its own path from `O_Create Offer` to an outcome "
-            "(accepted, refused or cancelled)."
-        ),
-        show_chart(
-            mo.as_html(offer_figure),
-            artifact_id=_state,
-            artifact_name="map_offer_states",
+            artifact_name="process_map",
             figure=None,
         ),
     ])
@@ -332,195 +350,19 @@ def _(activity_log, event_log, kit, mo, record, show_chart, state_of):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 2. Question 1a: which data does `A_Create Application` carry?
+    ## 3. The answers
 
-    **Approach.** The *schema* of an activity is the set of attributes that take a value on its events. So we keep only the events
-    of `A_Create Application` and, for every attribute, count how many of them have a value. An attribute with at least one value
-    belongs to the schema.
-    """)
-    return
+    1. **Schema of `A_Create Application`:** eleven attributes: eight that describe any event and three that describe the loan
+       application (`LoanGoal`, `ApplicationType`, `RequestedAmount`). Every application starts with this activity, so it is the data
+       an application enters the process with.
+    2. **Missing values:** none. Every attribute of the schema is filled on every event. The attributes that are empty on this
+       activity are offer attributes that do not belong to its schema.
+    3. **Attributes used by more than one activity:** `OfferID` is re-used: the map of the events that carry it shows the offer
+       states after `O_Create Offer`. `CreditScore` is not: its map shows a single activity, `O_Create Offer`.
 
-
-@app.cell(hide_code=True)
-def _(event_log, kit, mo, record, show_table, state_of):
-    create_coverage = record(["create_coverage"], kit.attribute_coverage, event_log, "A_Create Application")
-    create_schema = record(["create_schema"], kit.attributes_with_a_value, create_coverage)
-    _state = state_of("create_schema")
-    mo.vstack([
-        mo.md(f"`A_Create Application` has **{len(create_schema)} attributes** in its schema:"),
-        show_table(
-            mo.ui.table(create_schema, selection=None, pagination=None),
-            artifact_id=_state,
-            artifact_name="create_schema",
-        ),
-    ])
-    return create_coverage, create_schema
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    **Answer 1a.** Eight of these attributes describe *any* event (who did it, when, which event it is, what kind of change), and
-    three describe the *loan application* itself: `case:LoanGoal`, `case:ApplicationType` and `case:RequestedAmount`. The map of
-    section 1 shows where this schema applies: every application starts with `A_Create Application`, so this is the data an
-    application enters the process with.
-
-    ## 3. Question 1b: which of those attributes have missing values?
-
-    **Approach.** For every attribute of the schema, count the `A_Create Application` events that have **no** value for it. Attributes
-    that are not in the schema are left out: an empty value there is not a *missing* value, the attribute simply does not belong to
-    this activity.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(create_coverage, create_schema, kit, mo, record, show_table, state_of):
-    missing_values, outside_schema = record(
-        ["missing_values", "outside_schema"], kit.missing_values_of, create_coverage, create_schema,
-    )
-    _state = state_of("missing_values")
-    _total = int(missing_values["missing"].sum())
-    mo.vstack([
-        mo.md(
-            f"**{_total} missing values** in {len(missing_values)} attributes. "
-            f"Never filled on `A_Create Application`, hence not in its schema: {', '.join(outside_schema)}."
-        ),
-        show_table(
-            mo.ui.table(missing_values, selection=None, pagination=None),
-            artifact_id=_state,
-            artifact_name="missing_values",
-        ),
-    ])
-    return missing_values, outside_schema
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    **Answer 1b.** None. Every attribute of the schema has a value on every `A_Create Application` event. The eight attributes that are
-    empty on this activity are all *offer* attributes, and they belong to the offer activities, not to this one.
-
-    ## 4. Question 1c: is any attribute used by more than one activity?
-
-    **Approach.** For every attribute, count on how many different activities it takes a value. More than one means the attribute is
-    re-used. The table answers the question for all attributes at once; the maps then *show* it for two of them.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(event_log, kit, mo, record, show_table, state_of):
-    attribute_reuse = record(["attribute_reuse"], kit.attribute_reuse_of, event_log)
-    _state = state_of("attribute_reuse")
-    mo.vstack([
-        mo.md(
-            f"**{int((attribute_reuse['activities'] > 1).sum())} of {len(attribute_reuse)} attributes** take a value "
-            "on more than one activity."
-        ),
-        show_table(
-            mo.ui.table(attribute_reuse, selection=None, pagination=None),
-            artifact_id=_state,
-            artifact_name="attribute_reuse",
-        ),
-    ])
-    return (attribute_reuse,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    Ten attributes are on all 26 activities, so they are re-used everywhere. The interesting ones are the others. Take `OfferID`,
-    which is on *some* activities: keep only the events that have an `OfferID`, and draw the map. Its nodes are the activities that
-    carry the attribute.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(event_log, kit, mo, record, show_chart, state_of):
-    offer_id_log = record(["offer_id_log"], kit.events_carrying, event_log, "OfferID")
-    offer_id_activities = record(["offer_id_activities"], kit.distinct_activities, offer_id_log)
-    offer_id_figure, offer_id_meta = record(
-        ["offer_id_figure", "offer_id_meta"],
-        kit.draw_map, offer_id_log, offer_id_activities, "set_based", True, False, 650,
-        name="draw_offer_id_map",
-    )
-    _state = state_of("offer_id_figure")
-    mo.vstack([
-        mo.md(
-            f"**`OfferID` is re-used.** The map of the events that carry it has {len(offer_id_activities)} activities: "
-            f"{', '.join(offer_id_activities)}. {offer_id_meta['total_nodes']} nodes."
-        ),
-        show_chart(
-            mo.as_html(offer_id_figure),
-            artifact_id=_state,
-            artifact_name="map_offer_id_carriers",
-            figure=None,
-        ),
-    ])
-    return (offer_id_activities,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    Now the opposite case. `CreditScore` is one of the attributes that only an offer has. Same reduction, same map: if the attribute
-    were re-used, the map would show several activities.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(event_log, kit, mo, record, show_chart, state_of):
-    credit_score_log = record(["credit_score_log"], kit.events_carrying, event_log, "CreditScore")
-    credit_score_activities = record(["credit_score_activities"], kit.distinct_activities, credit_score_log)
-    credit_score_figure, credit_score_meta = record(
-        ["credit_score_figure", "credit_score_meta"],
-        kit.draw_map, credit_score_log, credit_score_activities, "set_based", True, False, 400,
-        name="draw_credit_score_map",
-    )
-    _state = state_of("credit_score_figure")
-    mo.vstack([
-        mo.md(
-            f"**`CreditScore` is not re-used.** The map of the events that carry it has "
-            f"{len(credit_score_activities)} activity: {', '.join(credit_score_activities)}."
-        ),
-        show_chart(
-            mo.as_html(credit_score_figure),
-            artifact_id=_state,
-            artifact_name="map_credit_score_carriers",
-            figure=None,
-        ),
-    ])
-    return (credit_score_activities,)
-
-
-@app.cell(hide_code=True)
-def _(
-    attribute_reuse,
-    create_schema,
-    credit_score_activities,
-    missing_values,
-    mo,
-    offer_id_activities,
-    outside_schema,
-):
-    _reused = int((attribute_reuse["activities"] > 1).sum())
-    mo.md(f"""
-    ## 5. The answers
-
-    1. **Schema of `A_Create Application`:** {len(create_schema)} attributes: eight that describe any event and three that describe
-       the loan application (`LoanGoal`, `ApplicationType`, `RequestedAmount`).
-    2. **Missing values:** {int(missing_values['missing'].sum())}. Every attribute of the schema is filled on every event; the
-       {len(outside_schema)} attributes that are empty on this activity are offer attributes that do not belong to its schema.
-    3. **Attributes used by more than one activity:** {_reused} of {len(attribute_reuse)}. Ten are on every activity; `OfferID` is on
-       {len(offer_id_activities)} offer activities; the other {len(attribute_reuse) - _reused} (for example `CreditScore`, on
-       `{credit_score_activities[0]}` only) belong to a single activity.
-
-    **How we got there:** a first look at the log told us the data depends on the activity; a table per question gave the numbers;
+    **How we got there:** a first look at the log told us the data depends on the activity; a table per activity gave the numbers;
     and the maps showed *where* an attribute lives, by drawing only the events that carry it. In the side panel, each note says what
-    one table or map shows. Now do the same on your own: the student notebook has the same tables and maps, and the tools to
+    one table or map shows. Now do the same on your own: the student notebook has the same tables and the map explorer, and you can
     reach these findings yourself.
     """)
     return
