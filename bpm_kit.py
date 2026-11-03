@@ -162,8 +162,6 @@ def attribute_coverage(log: pd.DataFrame, activity: str) -> pd.DataFrame:
     ).rename_axis("attribute").reset_index()
 
 
-def attributes_with_a_value(coverage: pd.DataFrame) -> pd.DataFrame:
-    return coverage[coverage["events with a value"] > 0].reset_index(drop=True)
 
 
 def activities_starting_with(log: pd.DataFrame, prefix: str) -> list:
@@ -195,36 +193,12 @@ def draw_map(log, activities, builder, allow_loops, show_empty, height):
     return figure, metadata
 
 
-def share_of_cases_starting_with(log: pd.DataFrame, activity: str) -> float:
-    first = log.sort_values(TIMESTAMP).groupby(CASE_ID)[ACTIVITY].first()
-    return float((first == activity).mean() * 100)
 
 
-def count_cases(log: pd.DataFrame) -> int:
-    return int(log[CASE_ID].nunique())
 
 
-def missing_values_of(coverage: pd.DataFrame, schema: pd.DataFrame):
-    attributes = list(schema["attribute"])
-    table = coverage[coverage["attribute"].isin(attributes)].assign(
-        missing=lambda t: t["events"] - t["events with a value"],
-        **{"% missing": lambda t: (100 - t["% of events"]).round(2)},
-    )[["attribute", "events", "events with a value", "missing", "% missing"]].reset_index(drop=True)
-    outside = coverage[~coverage["attribute"].isin(attributes)]["attribute"].tolist()
-    return table, outside
 
 
-def attribute_reuse_of(log: pd.DataFrame) -> pd.DataFrame:
-    """For every attribute: on how many different activities does it take a value?"""
-    present = log.drop(columns=[ACTIVITY]).notna().groupby(log[ACTIVITY]).any()
-    return pd.DataFrame(
-        {
-            "activities": present.sum(),
-            "carried by": present.apply(
-                lambda column: ", ".join(sorted(column.index[column])) if column.sum() <= 8 else "all or most activities"
-            ),
-        }
-    ).sort_values(["activities", "carried by"], ascending=[False, True]).rename_axis("attribute").reset_index()
 
 
 # --- recording ---------------------------------------------------------------------------------------------------------------------
