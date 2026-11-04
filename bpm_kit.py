@@ -1,19 +1,32 @@
 """The code the two BPI Challenge 2017 notebooks share: the steps of the analysis, the key box, and how a step is recorded.
 
-`student-notebook.py` and `model-solution.py` import this module; so does `tools/make_model_solution.py`, which records the
-model analysis. Keeping the steps here means the notebook a student works in, the tutorial that replays a solution and the
-script that records it can never drift apart: they call the same functions under the same names.
+`student-notebook.py` and `model-solution.py` import this module. Keeping the steps here means the notebook a student works in
+and the tutorial that replays a solution call the same functions under the same names, so they cannot drift apart.
 """
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 from pathlib import Path
 
 import anywidget
-import lcm
 import pandas as pd
 import traitlets
+
+# pm4py looks up its parent process while it is imported (to spot Power BI). In "Run as app" mode on molab the notebook's parent
+# does not exist (pid 0) and psutil raises, which would stop the whole notebook. Import it as a process that has a parent.
+_real_getppid = os.getppid
+try:
+    import psutil
+
+    psutil.Process(_real_getppid())
+except Exception:
+    os.getppid = os.getpid  # no parent process to look up (or no psutil, which is harmless)
+try:
+    import lcm
+finally:
+    os.getppid = _real_getppid
 
 ACTIVITY = "concept:name"
 CASE_ID = "case:concept:name"
