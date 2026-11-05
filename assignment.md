@@ -29,7 +29,7 @@ An application can have several offers, but at most one offer is accepted per ap
 
 ## How to work
 
-1. **Work through the tutorial** (`tutorial.py`). It replays a short analysis of another log and explains the elements of a map,
+1. **Work through the tutorial** (`tutorial.py`). It replays a short analysis of another part of the same log (the workflow activities) and explains the elements of a map,
    its settings, the patterns a map makes visible, and how to write intents and findings.
 2. **Open the student notebook** (`student-notebook.py`) and enter your key. Your work is saved automatically; you can close the
    page and continue later with the same key.

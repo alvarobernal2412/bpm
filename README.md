@@ -7,7 +7,7 @@ written in the [`marimo-pmprov`](https://github.com/alvarobernal2412/marimo-pmpr
 
 | Notebook | Panel mode | What it does |
 |---|---|---|
-| [`tutorial.py`](tutorial.py) | reviewer | Replays a recorded, annotated analysis of a small log (BPIC 2020 *Domestic Declarations*) that demonstrates each pattern of the LCM paper (mainstream vs. exceptional behavior, knockout structure, leakage, rework, folding, outcome distribution, variants), with a reference of the map elements and settings, a guide to writing intents and findings, and a live map explorer. |
+| [`tutorial.py`](tutorial.py) | reviewer | Replays a recorded, annotated analysis of the workflow activities (`W_`) of the BPI 2017 log that demonstrates how to read the maps (mainstream vs. exceptional behavior, leakage, rework, folding, variants, the abstractions), with a reference of the map elements and settings, a guide to writing intents and findings, and a live map explorer. |
 | [`student-notebook.py`](student-notebook.py) | analyst | The student enters a **key**, looks at the log, draws maps with the map explorer (every map is a recorded step) and writes notes. Work is saved to the course server under the key. |
 | [`model-solution.py`](model-solution.py) | reviewer | Replays the annotated solution of Tasks 8 to 10, with a live map explorer on the BPI 2017 log. |
 
@@ -22,7 +22,6 @@ replayed map copies its settings into the explorer.
 | `build_histories.py` | Records the tutorial and the model solution (steps and notes) and writes them to `histories/`; with `--push`, also stores them on the course server. |
 | `histories/tutorial.zip`, `histories/model-solution.zip` | The recorded analyses, replayed when the course server does not provide them. |
 | `data/bpi2017.parquet` | BPI Challenge 2017 (31,509 applications, 1,202,267 events, 19 columns), 25 MB. |
-| `data/declarations.csv` | BPI Challenge 2020, Domestic Declarations, preprocessed subset (8,260 cases, 46,375 events), from the `lc-maps` repository. |
 
 Each notebook starts with a `# /// script` header that lists its dependencies, so molab (or `marimo --sandbox`) builds the
 environment from it. Python 3.13 is needed (pmprov requires it).
@@ -66,6 +65,4 @@ tags beside the database).
 
 `data/bpi2017.parquet`: van Dongen, B.F., *BPI Challenge 2017*, 4TU.ResearchData,
 <https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b>.
-`data/declarations.csv`: van Dongen, B.F., *BPI Challenge 2020: Domestic Declarations*, 4TU.ResearchData,
-<https://doi.org/10.4121/uuid:3f422315-ed9d-4882-891f-e180b5b4feb5>, licensed CC BY-NC 4.0.
-Both stay under the terms of the original datasets.
+It stays under the terms of the original dataset.
