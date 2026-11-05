@@ -1,7 +1,9 @@
-"""The code the two BPI Challenge 2017 notebooks share: the steps of the analysis, the key box, and how a step is recorded.
+"""The code the three course notebooks share: loading the logs, drawing a map, the map controls, the key box, how a step is
+recorded and how a recorded analysis is opened for reading.
 
-`student-notebook.py` and `model-solution.py` import this module. Keeping the steps here means the notebook a student works in
-and the tutorial that replays a solution call the same functions under the same names, so they cannot drift apart.
+`tutorial.py`, `student-notebook.py` and `model-solution.py` import this module. Keeping the steps here means that the notebook a
+student works in and the notebooks that replay a recorded analysis call the same functions under the same names, so a recorded
+map can always be opened again in the map explorer with the settings that drew it.
 """
 from __future__ import annotations
 
@@ -32,8 +34,17 @@ ACTIVITY = "concept:name"
 CASE_ID = "case:concept:name"
 TIMESTAMP = "time:timestamp"
 
-HISTORY_NAME = "BPI 2017 Task 1 with LCM maps"  # what a student's work is stored under
-SOLUTION_HISTORY_NAME = "BPI 2017 Task 1, model solution"
+# The logs of the course, by their place in the repository.
+BPI2017 = "data/bpi2017.parquet"  # BPI Challenge 2017, loan applications (Tasks 8 to 10)
+DECLARATIONS = "data/declarations.csv"  # BPI Challenge 2020, domestic declarations (the tutorial)
+
+# The names the recorded analyses are stored under.
+HISTORY_NAME = "BPI 2017 Tasks 8-10 with LC maps"  # a student's work, and the model solution
+TUTORIAL_HISTORY_NAME = "LC maps tutorial"
+
+# Where the reviewer notebooks find a recorded analysis when the course server does not provide it.
+TUTORIAL_ZIP = "histories/tutorial.zip"
+SOLUTION_ZIP = "histories/model-solution.zip"
 
 _FAMILIES = {"A_": "Application", "O_": "Offer", "W_": "Workflow"}
 
@@ -99,9 +110,7 @@ class KeyBox(anywidget.AnyWidget):
     """
 
 
-# --- the steps of the analysis ------------------------------------------------------------------------------------------------
-# Each is a plain function. A notebook runs it through record(), which stores its inputs and outputs as one step.
-
+# --- the project's files ------------------------------------------------------------------------------------------------------
 
 _locate = None
 
@@ -113,10 +122,22 @@ def use_project_files(locate) -> None:
     _locate = locate
 
 
+def project_path(name: str) -> Path:
+    return Path(_locate(name)) if _locate else Path(__file__).resolve().parent / name
+
+
+# --- the steps of the analysis ------------------------------------------------------------------------------------------------
+# Each is a plain function. A notebook runs it through record(), which stores its inputs and outputs as one step.
+
+
 def load_event_log(name: str) -> pd.DataFrame:
-    """The BPI 2017 log (a Parquet copy of BPI_Challenge_2017.xes, all 19 columns). `name` is its place in the project, such as
-    `data/bpi2017.parquet`: it is what gets recorded, so a recorded analysis names the file, not a folder of somebody's computer."""
-    path = _locate(name) if _locate else Path(__file__).resolve().parent / name
+    """One of the course logs. `name` is its place in the project, such as `data/bpi2017.parquet`: it is what gets recorded,
+    so a recorded analysis names the file, not a folder of somebody's computer."""
+    path = project_path(name)
+    if path.suffix == ".csv":
+        log = pd.read_csv(path)
+        log[TIMESTAMP] = pd.to_datetime(log[TIMESTAMP], utc=True, format="ISO8601")
+        return log
     return pd.read_parquet(path)
 
 
@@ -131,90 +152,264 @@ def summarise_log(log: pd.DataFrame) -> dict:
 
 def family_of(activity: str) -> str:
     """Application (A_), Offer (O_) or Workflow (W_), by the start of the activity name."""
-    return _FAMILIES.get(activity[:2], "Other")
+    return _FAMILIES.get(activity[:2], "")
 
 
 def activity_overview(log: pd.DataFrame) -> pd.DataFrame:
-    """Every activity with its family, how many events it has and in how many cases it occurs."""
+    """Every activity with its family (when the log has families), how many events it has and in how many cases it occurs."""
     grouped = log.groupby(ACTIVITY)
     table = pd.DataFrame({"events": grouped.size(), "cases": grouped[CASE_ID].nunique()})
     table["% of cases"] = (table["cases"] / log[CASE_ID].nunique() * 100).round(1)
-    table.insert(0, "family", [family_of(name) for name in table.index])
-    order = {name: i for i, name in enumerate(_FAMILIES.values())}
     table = table.rename_axis("activity").reset_index()
-    return table.sort_values(["family", "events"], key=lambda c: c.map(order) if c.name == "family" else -c).reset_index(drop=True)
-
-
-def attribute_overview(log: pd.DataFrame) -> pd.DataFrame:
-    """Every column of the log: how many events have a value for it, and how many different values there are."""
-    filled = log.notna().sum()
-    return pd.DataFrame(
-        {
-            "events with a value": filled,
-            "% of events": (filled / len(log) * 100).round(2),
-            "different values": log.nunique(),
-        }
-    ).rename_axis("attribute").reset_index()
-
-
-def log_sample(log: pd.DataFrame, rows: int) -> pd.DataFrame:
-    """The first events of the log, as they are stored."""
-    return log.head(rows).reset_index(drop=True)
-
-
-def attribute_coverage(log: pd.DataFrame, activity: str) -> pd.DataFrame:
-    """For one activity: how many of its events carry each attribute."""
-    events = log[log[ACTIVITY] == activity]
-    carried = events.notna().sum()
-    return pd.DataFrame(
-        {
-            "events with a value": carried,
-            "events": len(events),
-            "% of events": (carried / len(events) * 100).round(2),
-        }
-    ).rename_axis("attribute").reset_index()
-
-
-
-
-def activities_starting_with(log: pd.DataFrame, prefix: str) -> list:
-    return sorted(a for a in log[ACTIVITY].unique() if a.startswith(prefix))
-
-
-def case_activity_timestamp(log: pd.DataFrame) -> pd.DataFrame:
-    return log[[CASE_ID, ACTIVITY, TIMESTAMP]]
-
-
-def events_carrying(log: pd.DataFrame, attribute: str) -> pd.DataFrame:
-    """The log reduced to the events that have a value for `attribute` (case, activity and timestamp only)."""
-    return log[log[attribute].notna()][[CASE_ID, ACTIVITY, TIMESTAMP]]
+    families = [family_of(name) for name in table["activity"]]
+    if any(families):
+        table.insert(1, "family", families)
+        order = {name: i for i, name in enumerate(_FAMILIES.values())}
+        table = table.assign(_order=table["family"].map(order)).sort_values(["_order", "events"], ascending=[True, False])
+        table = table.drop(columns="_order")
+    else:
+        table = table.sort_values("events", ascending=False)
+    return table.reset_index(drop=True)
 
 
 def distinct_activities(log: pd.DataFrame) -> list:
     return sorted(log[ACTIVITY].unique())
 
 
-def draw_map(log, activities, builder, allow_loops, show_empty, height):
-    """A Linear Continuous Process Mapper map of `log` over `activities`."""
-    figure, metadata = lcm.get_service(log).generate(
-        activities=activities,
-        map_type=builder,
+# --- maps -----------------------------------------------------------------------------------------------------------------------
+# A map is drawn from the settings below. They are the same in all three notebooks, and every recorded map keeps the settings
+# that drew it (in its metadata), so a map seen in a replay can be opened again in the map explorer.
+
+MAP_TYPES = {"Set-based": "set_based", "Last-activity-based": "last_activity_based", "Sequence-based": "sequence_based"}
+
+# What a path in the map stands for. "application" uses the log's case id; "offer" regroups the events that carry an OfferID
+# into one path per offer (a sub-log; O_Create Offer has no OfferID, so it is not part of an offer's path).
+CASE_NOTIONS = {"A loan application": "application", "An offer (by OfferID)": "offer"}
+_CASE_COLUMN = {"application": CASE_ID, "offer": "OfferID"}
+
+DEFAULT_SETTINGS = {
+    "activities": None,  # None draws every activity
+    "map_type": "set_based",
+    "allow_loops": True,
+    "show_empty": True,
+    "folds": {},
+    "case_notion": "application",
+}
+
+
+def case_notions_of(log: pd.DataFrame) -> dict:
+    """The case notions a log supports: the offer notion only when the log has an OfferID column."""
+    return {label: key for label, key in CASE_NOTIONS.items() if _CASE_COLUMN[key] in log.columns}
+
+
+def normalise_settings(settings: dict | None) -> dict:
+    merged = {**DEFAULT_SETTINGS, **(settings or {})}
+    merged["folds"] = {name: list(members) for name, members in (merged.get("folds") or {}).items()}
+    if merged["activities"] is not None:
+        merged["activities"] = list(merged["activities"])
+    return merged
+
+
+_services: dict = {}
+
+
+def _service(log: pd.DataFrame, case_notion: str):
+    """The map service for `log` under one case notion. Building it reads the whole log, so it is kept for the next map."""
+    key = (id(log), len(log), case_notion)
+    if key not in _services:
+        column = _CASE_COLUMN[case_notion]
+        events = log[log[column].notna()] if column != CASE_ID else log
+        events = events[[column, ACTIVITY, TIMESTAMP]].rename(columns={column: CASE_ID})
+        _services[key] = (lcm.get_service(events), set(events[ACTIVITY].unique()), int(events[CASE_ID].nunique()))
+    return _services[key]
+
+
+def draw_map(log, activities, map_type, allow_loops, show_empty, folds, case_notion, height=620):
+    """A Linear Continuous Process Mapper map of `log`.
+
+    `activities` are activity names as they are in the log (None for all). `folds` maps a fold name to the activities it
+    replaces; a fold is drawn when at least one of its activities is selected. Selected activities that do not occur under the
+    case notion are left out and listed in the metadata. Returns the Plotly figure and a dict that describes the map, including
+    the settings that drew it.
+    """
+    service, available, cases = _service(log, case_notion)
+    selected = sorted(available) if activities is None else list(activities)
+    kept = [a for a in selected if a in available]
+    left_out = [a for a in selected if a not in available]
+
+    folds_used, fold_of = {}, {}
+    for name, members in (folds or {}).items():
+        name = (name or "").strip()
+        present = [m for m in members if m in available]
+        if name and present:
+            folds_used[name] = present
+            fold_of.update({m: name for m in present})
+    drawn = list(dict.fromkeys(fold_of.get(a, a) for a in kept))
+    if not drawn:
+        raise ValueError("None of the selected activities occurs in this log under this case notion. Select other activities.")
+
+    figure, metadata = service.generate(
+        activities=drawn,
+        map_type=map_type,
         allow_loops=allow_loops,
         visualize_empty_cases=show_empty,
+        folds=folds_used,
     )
-    figure.update_layout(height=height)
-    return figure, metadata
+    figure.update_layout(height=height, margin=dict(l=10, r=10, t=10, b=10))
+    settings = {
+        "activities": None if activities is None else list(activities),
+        "map_type": map_type,
+        "allow_loops": allow_loops,
+        "show_empty": show_empty,
+        "folds": {k: list(v) for k, v in (folds or {}).items()},
+        "case_notion": case_notion,
+    }
+    return figure, {**metadata, "cases": cases, "drawn": drawn, "left_out": left_out, "settings": settings}
 
 
+def draw(log, settings, height=620):
+    """`draw_map` from a settings dict (the map explorer's value)."""
+    s = normalise_settings(settings)
+    return draw_map(log, s["activities"], s["map_type"], s["allow_loops"], s["show_empty"], s["folds"], s["case_notion"], height)
 
 
+def describe_settings(settings: dict) -> str:
+    """The settings of a map in one Markdown paragraph."""
+    s = normalise_settings(settings)
+    abstraction = {v: k for k, v in MAP_TYPES.items()}[s["map_type"]]
+    notion = {v: k for k, v in CASE_NOTIONS.items()}[s["case_notion"]]
+    notion = notion[0].lower() + notion[1:]
+    activities = "all activities" if s["activities"] is None else ", ".join(f"`{a}`" for a in s["activities"])
+    folds = "; ".join(f"**{n}** = {', '.join(f'`{m}`' for m in ms)}" for n, ms in s["folds"].items()) or "none"
+    return (
+        f"**Abstraction:** {abstraction} · "
+        + (f"**Each path is:** {notion} · " if s["case_notion"] != "application" else "")
+        + f"**Self-loops:** {'shown' if s['allow_loops'] else 'hidden'} · **Empty traces:** {'shown' if s['show_empty'] else 'hidden'}  \n"
+        f"**Activities:** {activities}  \n**Folds:** {folds}"
+    )
 
 
+def describe_map(meta) -> str:
+    """The counts of a drawn map in one line."""
+    if isinstance(meta, NotStored) or not isinstance(meta, dict):
+        return ""
+    return (
+        f"{meta.get('cases', 0):,} paths · {meta['total_nodes']} nodes · {meta['nodes_leakage_gt_0']} nodes where paths end · "
+        f"{meta['empty_cases']:,} empty traces"
+    )
 
 
+# --- the map explorer ---------------------------------------------------------------------------------------------------------
+# The controls are one mo.ui.dictionary so that a notebook needs a single global name for them. A notebook keeps two marimo
+# states: the *draft* settings the controls are built from (changed by the quick-selection buttons and by "open in the
+# explorer") and the *drawn* settings (changed only by the Refresh button).
+
+FOLD_SLOTS = 3
 
 
-# --- recording ---------------------------------------------------------------------------------------------------------------------
+def activity_presets(names: list) -> dict:
+    """Quick selections for the activity picker: one per family present in the log, all, and none."""
+    presets = {}
+    for prefix, family in _FAMILIES.items():
+        members = [a for a in names if a.startswith(prefix)]
+        if members:
+            presets[f"{family} ({prefix})"] = members
+    presets["All"] = list(names)
+    presets["None"] = []
+    return presets
+
+
+def map_controls(mo, names: list, settings: dict | None, case_notions: dict):
+    s = normalise_settings(settings)
+    folds = list(s["folds"].items())[:FOLD_SLOTS]
+    folds += [("", [])] * (FOLD_SLOTS - len(folds))
+    notion_label = {v: k for k, v in case_notions.items()}.get(s["case_notion"], next(iter(case_notions)))
+    return mo.ui.dictionary(
+        {
+            "activities": mo.ui.multiselect(
+                options=names,
+                value=[a for a in (names if s["activities"] is None else s["activities"]) if a in names],
+                label="Activities to draw",
+                full_width=True,
+            ),
+            "map_type": mo.ui.dropdown(
+                options=MAP_TYPES, value={v: k for k, v in MAP_TYPES.items()}[s["map_type"]], label="Abstraction"
+            ),
+            "case_notion": mo.ui.dropdown(options=case_notions, value=notion_label, label="Each path is"),
+            "allow_loops": mo.ui.switch(value=s["allow_loops"], label="Show self-loops"),
+            "show_empty": mo.ui.switch(value=s["show_empty"], label="Show empty traces"),
+            "folds": mo.ui.array(
+                [
+                    mo.ui.dictionary(
+                        {
+                            "name": mo.ui.text(value=name, placeholder="Fold name", label=f"Fold {i + 1}"),
+                            "activities": mo.ui.multiselect(options=names, value=[m for m in members if m in names], label="replaces"),
+                        }
+                    )
+                    for i, (name, members) in enumerate(folds)
+                ]
+            ),
+        }
+    )
+
+
+def settings_from(value: dict, names: list) -> dict:
+    """The settings that the controls' value describes."""
+    activities = list(value["activities"])
+    folds = {}
+    for slot in value["folds"]:
+        name = (slot["name"] or "").strip()
+        if name and slot["activities"]:
+            folds[name] = list(slot["activities"])
+    return normalise_settings(
+        {
+            "activities": None if set(activities) == set(names) else sorted(activities),
+            "map_type": value["map_type"],
+            "allow_loops": value["allow_loops"],
+            "show_empty": value["show_empty"],
+            "folds": folds,
+            "case_notion": value["case_notion"],
+        }
+    )
+
+
+def fold_problems(settings: dict) -> list:
+    """What is wrong with the folds, in words (an empty list when nothing is)."""
+    problems, seen = [], {}
+    for name, members in normalise_settings(settings)["folds"].items():
+        for member in members:
+            if member in seen:
+                problems.append(f"`{member}` is in two folds ({seen[member]} and {name}). An activity can be in one fold only.")
+            seen[member] = name
+    return problems
+
+
+def controls_layout(mo, controls, preset_buttons, refresh_button, status, show_case_notion: bool):
+    first_row = [controls["map_type"]] + ([controls["case_notion"]] if show_case_notion else [])
+    first_row += [controls["allow_loops"], controls["show_empty"]]
+    folds = mo.vstack(
+        [mo.hstack([slot["name"], slot["activities"]], justify="start", gap=1, widths=[1, 3]) for slot in controls["folds"]],
+        gap=0.5,
+    )
+    return mo.vstack(
+        [
+            mo.hstack(first_row, justify="start", gap=2, align="end", wrap=True),
+            mo.hstack([mo.md("Quick selection:"), preset_buttons], justify="start", gap=1, align="center"),
+            controls["activities"],
+            mo.accordion({"Activity folding": folds}),
+            mo.hstack([refresh_button, status], justify="start", gap=1, align="center"),
+        ],
+        gap=0.75,
+    )
+
+
+def refresh_status(mo, current: dict, drawn: dict | None):
+    if drawn is not None and current == drawn:
+        return mo.md('<span style="color:#15803d">&#10003; The map shows these settings</span>')
+    return mo.md('<span style="color:#b45309">&#9679; Settings changed: press Refresh visualization</span>')
+
+
+# --- recording ----------------------------------------------------------------------------------------------------------------
 # Every analysis step goes through record(targets, function, *args). The analyst's record() runs the step and records it. The
 # reviewer's record() runs nothing: it hands back what that step produced at the step the reviewer is on, so each cell shows its
 # own output as it was then, like a replay.
@@ -291,3 +486,56 @@ def reviewer_recorder(snap, mo):
         return f"{snap.state_id}-earlier" if snap.state_id else "analysis"
 
     return record, state_of
+
+
+# --- opening a recorded analysis ----------------------------------------------------------------------------------------------
+
+
+def fetch_recorded(zip_name: str, sync_url: str | None, key: str | None):
+    """A fresh folder with a recorded analysis, and where it came from.
+
+    The course server is asked first (with a read key whose course is closed, so the analysis cannot be overwritten). When there is
+    no server, no key or no answer, the copy kept in the repository (`zip_name`) is used.
+    """
+    from provenance_widget.portable import unpack_provenance
+    from provenance_widget.sync import Sync
+
+    folder = Path(tempfile.mkdtemp(prefix="bpm-recorded-")) / "provenance"
+    if sync_url and key:
+        try:
+            if Sync(sync_url, key, folder).restore() == "restored":
+                return folder, "the course server"
+        except Exception:
+            pass
+    unpack_provenance(project_path(zip_name).read_bytes(), folder)
+    return folder, "the copy in the course repository"
+
+
+def open_recorded_analysis(zip_name: str, sync_url: str | None, key: str | None, history_name: str):
+    """A tracker that reads the recorded analysis `history_name`, and where it came from (None, reason when it is not found).
+
+    The course server is tried first; when it does not have the analysis, the copy in the repository is used."""
+    tried = []
+    for use_server in ([True] if sync_url and key else []) + [False]:
+        try:
+            folder, source = fetch_recorded(zip_name, sync_url if use_server else None, key if use_server else None)
+            rt = open_recorded(folder, history_name)
+            if rt is not None:
+                return rt, source
+            tried.append(f"{source} has no analysis named '{history_name}'")
+        except Exception as problem:  # no network, no file: try the next place
+            tried.append(str(problem))
+    return None, "; ".join(tried)
+
+
+def open_recorded(folder: Path, history_name: str):
+    """A pmprov tracker that reads the history `history_name` in `folder` and records nothing. None when it is not there."""
+    from provenance_widget.portable import relocate_artifacts
+    from tracker.runtime import RuntimeTracker
+    from tracker.storage import DuckDBSQLiteBackend
+
+    (folder / "artifacts").mkdir(parents=True, exist_ok=True)
+    relocate_artifacts(folder / "provenance.db", folder / "artifacts")
+    storage = DuckDBSQLiteBackend(db_path=folder / "provenance.db", artifact_dir=folder / "artifacts")
+    history = storage.find_latest_history_by_name(history_name)
+    return None if history is None else RuntimeTracker.resume(storage, history, session_id="reviewer")
