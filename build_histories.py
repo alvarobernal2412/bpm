@@ -118,149 +118,135 @@ def pct(part, whole):
 
 
 # --- the tutorial --------------------------------------------------------------------------------------------------------------
+# It teaches how to read the maps on the BPI 2017 log, on its workflow activities (W_) only. The tasks ask for the application (A_)
+# and offer (O_) lifecycles and for the outcomes, so nothing here shows what they should find.
 
 
 def build_tutorial(work: Path) -> Path:
     s = Session(work / "tutorial", kit.TUTORIAL_HISTORY_NAME)
-    log = s.record(["event_log"], kit.load_event_log, kit.DECLARATIONS)
-    s.record(["log_summary"], kit.summarise_log, log)
+    log = s.record(["event_log"], kit.load_event_log, kit.BPI2017)
+    summary = s.record(["log_summary"], kit.summarise_log, log)
     overview = s.record(["activities"], kit.activity_overview, log)
-
-    SUB, APP_ADM, FIN, REQ, PAY = (
-        "Declaration SUBMITTED by EMPLOYEE", "Declaration APPROVED by ADMINISTRATION", "Declaration FINAL_APPROVED by SUPERVISOR",
-        "Request Payment", "Payment Handled",
+    names = kit.distinct_activities(log)
+    W = [a for a in names if a.startswith("W_")]
+    COMPLETE, CALL, VALIDATE, INCOMPLETE, LEADS = (
+        "W_Complete application", "W_Call after offers", "W_Validate application", "W_Call incomplete files", "W_Handle leads",
     )
-    APP_BUD, REJ_EMP, SAVED = "Declaration APPROVED by BUDGET OWNER", "Declaration REJECTED by EMPLOYEE", "Declaration SAVED by EMPLOYEE"
-    REJ_APPROVERS = ["Declaration REJECTED by ADMINISTRATION", "Declaration REJECTED by BUDGET OWNER", "Declaration REJECTED by SUPERVISOR"]
-    FOLD = {"Rejected by an approver": REJ_APPROVERS}
+    # the names are taken from the log: one of them ends with a space ("W_Shortened completion ")
+    RARE = [a for a in W if a.strip() in ("W_Assess potential fraud", "W_Shortened completion", "W_Personal Loan collection")]
+    assert len(RARE) == 3, RARE
+    FOLD = {"Rare workflow activities": RARE}
 
-    t = traces(log)
-    n = len(t)
-    variants = t.apply(tuple).value_counts()
-    main = variants.get((SUB, APP_ADM, FIN, REQ, PAY), 0)
-    main_budget = variants.get((SUB, APP_ADM, APP_BUD, FIN, REQ, PAY), 0)
+    t = traces(log, lambda l: l[kit.ACTIVITY].str.startswith("W_"))
+    n = summary["cases"]
+    in_cases = overview.set_index("activity")["cases"]
     last = t.str[-1].value_counts()
-    submissions = t.apply(lambda tr: tr.count(SUB))
-    both = t.apply(lambda tr: PAY in tr and REJ_EMP in tr).sum()
-    neither = t.apply(lambda tr: PAY not in tr and REJ_EMP not in tr).sum()
-    case_share = overview.set_index("activity")["% of cases"]
-    rejected_by_approver = t.apply(lambda tr: any(a in REJ_APPROVERS for a in tr)).sum()
+    order = t.apply(lambda tr: tuple(dict.fromkeys(tr))).value_counts()
+    main = order.index[0]
+    rare_cases = int(t.apply(lambda tr: any(a in RARE for a in tr)).sum())
+    events_per_case = t.apply(lambda tr: tr.count(INCOMPLETE))
+    never = int((events_per_case == 0).sum())
+    most_common = events_per_case[events_per_case > 0].value_counts().idxmax()
+    sequences = int(t.apply(tuple).nunique())
 
     # 1. the table of activities
     s.intent(
         "activities", "activity_overview", granularity="dataset",
-        text="See which activities the log records and how common each one is, before drawing any map.",
+        text="See which activities the log records, in which families, and how common each one is, before drawing any map.",
     )
     s.finding(
         "activities", "activity_overview", granularity="dataset", tags=["first look"],
         text=(
-            f"The log has {n:,} declarations and {len(overview)} activities. Five activities occur in more than 95% of the "
-            f"declarations (submission, approval by administration, final approval by the supervisor, payment request and payment). "
-            f"Rejections are much rarer: a rejection by administration occurs in {case_share[REJ_APPROVERS[0]]}% of the declarations."
+            f"The log has {n:,} loan applications and {summary['activities']} activities in three families: A_ (the state of the "
+            f"application), O_ (the state of an offer) and W_ (work done by an employee). This tutorial maps only the {len(W)} W_ "
+            f"activities. One thing to keep in mind: a W_ activity is a piece of work, and every piece of work leaves several events "
+            f"(scheduled, started, suspended, resumed, completed), all under the same name. The event counts are therefore much larger "
+            f"than the case counts."
         ),
     )
 
-    # 2. all activities, set-based: mainstream and exceptional behavior, leakage
-    meta = s.map(log, None, "set_based")
+    # 2. the W_ activities, set-based: mainstream and exceptional behavior, leakage, self-loops
+    meta = s.map(log, W, "set_based")
+    nodes_all = meta["total_nodes"]
     s.intent(
         "map_figure", "process_map",
-        "Draw every activity with the set-based abstraction to separate the mainstream behavior from the exceptions.",
+        "Draw the workflow activities with the set-based abstraction to separate the mainstream behavior from the exceptions.",
     )
     s.finding(
         "map_figure", "process_map", tags=["mainstream vs exceptional"],
         text=(
-            f"Two thick bands carry most declarations: submission, approval by administration, final approval, payment request "
-            f"and payment ({main:,} declarations, {pct(main, n)}), and the same path with an approval by the budget owner "
-            f"({main_budget:,}, {pct(main_budget, n)}). Every other path is a thin band, so the exceptional behavior is clearly "
-            f"separated from the mainstream."
+            f"Every application performs {COMPLETE[2:]}, and {in_cases[CALL] / n * 100:.1f}% perform {CALL[2:]}; the thick bands of "
+            f"the map are these two activities. The most common path is {' → '.join(a[2:] for a in main)} ({order.iloc[0]:,} "
+            f"applications, {pct(order.iloc[0], n)}); {pct(int(in_cases[LEADS]), n)} of the applications start with {LEADS[2:]}. The "
+            f"rare activities are thin bands: {RARE[0][2:].strip()} occurs in {in_cases[RARE[0]]:,} applications, {RARE[1][2:].strip()} in "
+            f"{in_cases[RARE[1]]:,} and {RARE[2][2:].strip()} in {in_cases[RARE[2]]:,}."
         ),
     )
     s.finding(
         "map_figure", "process_map", tags=["leakage"],
         text=(
-            f"Dark nodes mark where paths end ({meta['nodes_leakage_gt_0']} nodes). Apart from the payment, {last.get(REJ_EMP, 0):,} "
-            f"declarations end right after REJECTED by EMPLOYEE, and {last.get(SAVED, 0):,} consist of SAVED by EMPLOYEE only: "
-            f"they were saved but never submitted."
+            f"Dark nodes mark where paths end ({meta['nodes_leakage_gt_0']} nodes; the tooltip gives the number). Most workflows end "
+            f"after {VALIDATE[2:]} ({last[VALIDATE]:,}, {pct(last[VALIDATE], n)}), after {CALL[2:]} ({last[CALL]:,}, "
+            f"{pct(last[CALL], n)}) or after {INCOMPLETE[2:]} ({last[INCOMPLETE]:,}, {pct(last[INCOMPLETE], n)}). A workflow that "
+            f"ends is not an outcome by itself: it only says what the last piece of work was."
+        ),
+    )
+    s.finding(
+        "map_figure", "process_map", tags=["rework"],
+        text=(
+            f"Loops on a node mean that events of the same activity follow each other. Here they must be read with care: one piece "
+            f"of work has several events, so a self-loop on {INCOMPLETE[2:]} or {VALIDATE[2:]} does not by itself say that the work "
+            f"was repeated."
         ),
     )
 
-    # 3. the same, last-activity-based: knockout stages, and why a back edge is ambiguous
-    s.map(log, None, "last_activity_based")
-    s.intent("map_figure", "process_map", 
-        "Switch to the last-activity abstraction (the directly-follows graph) to see at which stages a declaration is stopped."
-    )
-    s.finding(
-        "map_figure", "process_map", tags=["knockout structure"],
-        text=(
-            "The map has one node per activity. A rejection can happen at each approval stage (administration, budget owner, "
-            "supervisor), and a rejection is normally followed by REJECTED by EMPLOYEE. Here a rejection does not end the case: the back edge "
-            "to SUBMITTED by EMPLOYEE shows that most rejected declarations are submitted again."
-        ),
+    # 3. the same, last-activity-based
+    meta_last = s.map(log, W, "last_activity_based")
+    s.intent(
+        "map_figure", "process_map",
+        "Switch to the last-activity abstraction (the directly-follows graph) and compare it with the set-based map.",
     )
     s.finding(
         "map_figure", "process_map", tags=["abstractions"],
         text=(
-            "In this abstraction the back edge forms a cycle, and a cycle alone does not tell whether an activity is repeated "
-            "(rework) or only ordered differently. The set-based map shows repetition as a self-loop, which is unambiguous."
+            f"The map has {meta_last['total_nodes']} nodes, against {nodes_all} in the set-based map: one node per activity, with "
+            f"arrows for the activities that directly follow each other. It is the smallest map, but a cycle between two activities "
+            f"can mean a repetition or only a different order, and the map cannot tell which. The set-based map separates them: a "
+            f"repetition is a self-loop."
         ),
     )
 
-    # 4. fold the rejections by approvers, set-based: rework as a self-loop
-    s.map(log, None, "set_based", folds=FOLD)
-    s.intent("map_figure", "process_map", 
-        "Fold the rejections by administration, budget owner and supervisor into one activity, because the question is whether "
-        "a declaration was rejected, not by whom. Then look at repetition in the set-based map."
+    # 4. fold the rare activities
+    meta_fold = s.map(log, W, "set_based", folds=FOLD)
+    s.intent(
+        "map_figure", "process_map",
+        "Fold the three rare activities into one, because the question is whether a rare activity occurred, not which one. Then "
+        "look at the set-based map again.",
     )
-    resubmitted = int((submissions >= 2).sum())
     s.finding(
-        "map_figure", "process_map", tags=["folding", "rework"],
+        "map_figure", "process_map", tags=["folding"],
         text=(
-            f"With the fold, the map has fewer and wider bands. {rejected_by_approver:,} declarations ({pct(rejected_by_approver, n)}) "
-            f"are rejected by an approver at least once. The self-loops show rework: {resubmitted:,} declarations are submitted "
-            f"more than once."
+            f"The map shrinks from {nodes_all} to {meta_fold['total_nodes']} nodes. The fold is one band of {rare_cases:,} "
+            f"applications ({pct(rare_cases, n)}) that perform at least one rare activity, which is easier to follow than three "
+            f"separate bands. What is lost is the difference between the three."
         ),
     )
 
-    # 5. sequence-based on two activities: how often the loop is repeated
-    s.map(log, [SUB] + REJ_APPROVERS, "sequence_based", folds=FOLD)
-    s.intent("map_figure", "process_map", "Count how many times a declaration goes through the rejection loop, with only the submission and the fold selected.")
-    counts = submissions.value_counts().sort_index()
-    s.finding(
-        "map_figure", "process_map", tags=["rework", "variants"],
-        text=(
-            f"The sequence-based map is the prefix tree: every node is a distinct beginning of a path. {counts.get(1, 0):,} "
-            f"declarations are submitted once, {counts.get(2, 0):,} twice, {counts.get(3, 0):,} three times and "
-            f"{int(counts[counts.index >= 4].sum()):,} four times or more. The empty trace node holds the {counts.get(0, 0):,} "
-            f"declarations that were never submitted."
-        ),
-    )
-
-    # 6. outcome candidates
-    s.map(log, [PAY, REJ_EMP], "set_based")
-    s.intent("map_figure", "process_map", 
-        "Check whether payment and REJECTED by EMPLOYEE can serve as the outcomes of a declaration: every declaration should "
-        "have exactly one of them."
+    # 5. sequence-based on one activity
+    meta_seq = s.map(log, [INCOMPLETE], "sequence_based")
+    s.intent(
+        "map_figure", "process_map",
+        f"Count how many events of {INCOMPLETE[2:]} an application has, selecting only that activity in the sequence-based "
+        "abstraction.",
     )
     s.finding(
-        "map_figure", "process_map", tags=["outcome distribution"],
+        "map_figure", "process_map", tags=["variants", "rework"],
         text=(
-            f"They are not mutually exclusive: {both:,} declarations reach both, because a rejection is usually followed by a new "
-            f"submission and a payment. The empty trace node holds {neither:,} declarations with neither. REJECTED by EMPLOYEE is "
-            f"therefore an intermediate state, not an outcome."
-        ),
-    )
-
-    # 7. outcomes as where a path ends
-    s.map(log, None, "last_activity_based", folds=FOLD)
-    s.intent("map_figure", "process_map", "Use where a declaration ends as its outcome: draw all activities, with the fold, in the last-activity abstraction.")
-    ended_after_approver = int(sum(last.get(a, 0) for a in REJ_APPROVERS))
-    s.finding(
-        "map_figure", "process_map", tags=["outcome distribution"],
-        text=(
-            f"The number of paths that end in a node (shown on hover) is a mutually exclusive and complete outcome distribution: "
-            f"{last.get(PAY, 0):,} declarations end with the payment ({pct(last.get(PAY, 0), n)}), {last.get(REJ_EMP, 0):,} with "
-            f"a rejection that was not followed by a new submission, {last.get(SAVED, 0):,} as saved only, and "
-            f"{ended_after_approver} right after a rejection by an approver (still open when the log was extracted)."
+            f"The sequence-based map is the prefix tree: every node is a distinct beginning of a path, so with one activity each step "
+            f"to the right is one more event of it. {never:,} applications have none (the empty trace node). Among the others, the "
+            f"most common number of events is {most_common}, because a piece of work leaves several events: this counts events, not "
+            f"pieces of work. With all eight activities the same abstraction would split the applications into {sequences:,} distinct "
+            f"sequences, far too many to read: use it on few activities."
         ),
     )
     return s.finish(HERE / kit.TUTORIAL_ZIP)

@@ -26,10 +26,11 @@ def _(mo):
     This notebook prepares you for the process map questions of the assignment. It has three parts:
 
     1. **A recorded analysis**, replayed step by step from the side panel. It was made with the same map explorer that you will
-       use in the student notebook, on a small event log of travel expense declarations (BPI Challenge 2020, *Domestic
-       Declarations*: 8,260 declarations, 12 activities).
+       use in the student notebook, on one part of the BPI Challenge 2017 loan application log: its **workflow
+       activities** (`W_`), the work that bank employees do on an application. The tasks ask about other parts of the log (the
+       application and offer lifecycles and the outcomes), so this analysis shows *how to read maps*, not what the tasks find.
     2. **A reference** of the elements of a map, of the map settings and of the patterns that the maps make visible.
-    3. **A map explorer** at the end of the page, where you change the settings yourself and draw your own maps of the same log.
+    3. **A map explorer** at the end of the page, where you change the settings yourself and draw your own maps of the log.
 
     **How to use the side panel**
 
@@ -40,10 +41,9 @@ def _(mo):
       table or map the note refers to.
     - Nothing on this page is recorded, and the notes cannot be changed here. You write your own notes in the student notebook.
 
-    **The data.** The declarations log is the *BPI Challenge 2020: Domestic Declarations* event log (van Dongen, B.F., 4TU.ResearchData,
-    [doi:10.4121/uuid:3f422315-ed9d-4882-891f-e180b5b4feb5](https://doi.org/10.4121/uuid:3f422315-ed9d-4882-891f-e180b5b4feb5)),
-    licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/): it may be used for non-commercial purposes with
-    attribution. This page uses a preprocessed subset of it.
+    **The data.** *BPI Challenge 2017* (van Dongen, B.F., 4TU.ResearchData,
+    [doi:10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b](https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b)): the
+    loan applications that a Dutch financial institution received in 2016.
     """)
     return
 
@@ -149,7 +149,7 @@ def _(mo):
     ## 1. The event log
 
     The first recorded steps load the log and count its activities. The table lists every activity with the number of events it
-    has, the number of declarations (cases) in which it occurs and that number as a share of all declarations.
+    has, the number of applications (cases) in which it occurs and that number as a share of all applications.
     """)
     return
 
@@ -192,6 +192,11 @@ def _(mo):
     | Tooltip (hover) | The number of cases flowing in and out of a node, and its leakage. |
 
     You can **drag a node** to untangle the bands; this changes the drawing only, not the numbers.
+
+    **Events, not pieces of work.** A map counts events. In this log a `W_` activity is a piece of work done by an employee, and one
+    piece of work leaves several events under the same name (scheduled, started, suspended, resumed, completed). A self-loop on a
+    `W_` activity, or a count of its events, therefore does not by itself say that the work was repeated. Keep this in mind when you
+    read the recorded maps below.
     """)
     return
 
@@ -210,7 +215,7 @@ def _(mo):
     | **Activity folding** | Several activities are drawn as one, under a name you choose (for example, all rejections as *Rejected*). A fold is drawn when at least one of its activities is selected. |
     | **Show self-loops** | Whether activities that do not move a case to a new node are drawn as loops. |
     | **Show empty traces** | Whether the cases with none of the selected activities are drawn as an `EMPTY TRACE` node. |
-    | **Each path is** | What a path stands for. Only in the BPI 2017 log: a loan application, or one offer (the offer events grouped by `OfferID`). |
+    | **Each path is** | What a path stands for: a loan application, or one offer (the offer events grouped by `OfferID`). The recorded analysis on this page does not use it; the tasks do. |
 
     A map is drawn only when you press **Refresh visualization**; the line next to the button tells you whether the map on screen
     matches the settings above it.
@@ -223,7 +228,9 @@ def _(mo):
     mo.md(r"""
     ## 4. Patterns to look for
 
-    The recorded analysis demonstrates each of these patterns; its notes are tagged with the name of the pattern.
+    The recorded analysis demonstrates mainstream vs. exceptional behavior, leakage, rework, folding and sequential variants, and
+    compares the abstractions; its notes are tagged with the name of the pattern. The other patterns (knockout structure, unexpected
+    ordering, outcome distribution) are for you to look for in the tasks.
 
     | Pattern | How it appears in a map | Settings that show it best |
     |---|---|---|
@@ -315,7 +322,7 @@ def _(mo):
     mo.md(r"""
     ## 7. Map explorer
 
-    Draw your own maps of the declarations log. Choose the settings and press **Refresh visualization**. The maps drawn here are
+    Draw your own maps of the BPI 2017 log. It opens on the workflow activities; drawing all 26 takes several seconds. Choose the settings and press **Refresh visualization**. The maps drawn here are
     not recorded.
     """)
     return
@@ -324,10 +331,12 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(kit):
     # the explorer works on the live log, loaded once
-    explorer_log = kit.load_event_log(kit.DECLARATIONS)
+    explorer_log = kit.load_event_log(kit.BPI2017)
     explorer_names = kit.distinct_activities(explorer_log)
     explorer_notions = kit.case_notions_of(explorer_log)
-    return explorer_log, explorer_names, explorer_notions
+    # the explorer opens on the workflow activities; drawing all 26 is slow
+    explorer_start = {"activities": [a for a in explorer_names if a.startswith("W_")]}
+    return explorer_log, explorer_names, explorer_notions, explorer_start
 
 
 @app.cell(hide_code=True)
@@ -339,8 +348,8 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(explorer_names, explorer_notions, get_draft, kit, mo):
-    map_controls = kit.map_controls(mo, explorer_names, get_draft(), explorer_notions)
+def _(explorer_names, explorer_notions, explorer_start, get_draft, kit, mo):
+    map_controls = kit.map_controls(mo, explorer_names, get_draft() or explorer_start, explorer_notions)
     return (map_controls,)
 
 
