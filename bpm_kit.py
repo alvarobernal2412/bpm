@@ -35,8 +35,7 @@ CASE_ID = "case:concept:name"
 TIMESTAMP = "time:timestamp"
 
 # The logs of the course, by their place in the repository.
-BPI2017 = "data/bpi2017.parquet"  # BPI Challenge 2017, loan applications (Tasks 8 to 10)
-DECLARATIONS = "data/declarations.csv"  # BPI Challenge 2020, domestic declarations (the tutorial)
+BPI2017 = "data/bpi2017.parquet"  # BPI Challenge 2017, loan applications (the tutorial and Tasks 8 to 10)
 
 # The names the recorded analyses are stored under.
 HISTORY_NAME = "BPI 2017 Tasks 8-10 with LC maps"  # a student's work, and the model solution
@@ -133,12 +132,7 @@ def project_path(name: str) -> Path:
 def load_event_log(name: str) -> pd.DataFrame:
     """One of the course logs. `name` is its place in the project, such as `data/bpi2017.parquet`: it is what gets recorded,
     so a recorded analysis names the file, not a folder of somebody's computer."""
-    path = project_path(name)
-    if path.suffix == ".csv":
-        log = pd.read_csv(path)
-        log[TIMESTAMP] = pd.to_datetime(log[TIMESTAMP], utc=True, format="ISO8601")
-        return log
-    return pd.read_parquet(path)
+    return pd.read_parquet(project_path(name))
 
 
 def summarise_log(log: pd.DataFrame) -> dict:
