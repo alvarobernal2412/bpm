@@ -62,19 +62,22 @@ def session_folder(key: str) -> Path:
 
 
 class KeyBox(anywidget.AnyWidget):
-    """A field for the student's key. The key is kept in this browser (not in the notebook, which a fork copies)."""
+    """A field for the student's key. The key is kept in this browser (not in the notebook, which a fork copies). `store` names
+    where, so that a notebook for reviewers does not pick up the key of the student notebook."""
 
     key = traitlets.Unicode("").tag(sync=True)
+    store = traitlets.Unicode("bpm-course-key").tag(sync=True)
+    placeholder = traitlets.Unicode("Paste your key here").tag(sync=True)
     _esm = """
     export default {
       render({ model, el }) {
-        const STORE = "bpm-course-key";
+        const STORE = model.get("store");
         const row = document.createElement("div");
         row.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap";
         const input = document.createElement("input");
         input.type = "password";
         input.autocomplete = "off";
-        input.placeholder = "Paste your key here";
+        input.placeholder = model.get("placeholder");
         input.style.cssText = "flex:1 1 320px;padding:8px 10px;font-size:14px;border:1px solid #94a3b8;border-radius:6px";
         const start = document.createElement("button");
         start.textContent = "Start";

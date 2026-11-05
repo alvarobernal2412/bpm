@@ -10,8 +10,9 @@ written in the [`marimo-pmprov`](https://github.com/alvarobernal2412/marimo-pmpr
 | [`tutorial.py`](tutorial.py) | reviewer | Replays a recorded, annotated analysis of the workflow activities (`W_`) of the BPI 2017 log that demonstrates how to read the maps (mainstream vs. exceptional behavior, leakage, rework, folding, variants, the abstractions), with a reference of the map elements and settings, a guide to writing intents and findings, and a live map explorer. |
 | [`student-notebook.py`](student-notebook.py) | analyst | The student enters a **key**, looks at the log, draws maps with the map explorer (every map is a recorded step) and writes notes. Work is saved to the course server under the key. |
 | [`model-solution.py`](model-solution.py) | reviewer | Replays the annotated solution of Tasks 8 to 10, with a live map explorer on the BPI 2017 log. |
+| [`reviewer-notebook.py`](reviewer-notebook.py) | reviewer | The reviewer enters a **student's key** and sees that student's work from the student notebook (steps, maps, notes) replayed, with the same live map explorer. The work is only read, never saved. |
 
-In all three notebooks the map explorer offers the same settings: activities (with quick selection by family), abstraction
+In all the notebooks the map explorer offers the same settings: activities (with quick selection by family), abstraction
 (set-, last-activity- or sequence-based), up to three activity folds, self-loops, empty traces, and, for BPI 2017, whether a path is a
 loan application or an offer (sub-tracing by `OfferID`). In the two reviewer notebooks, **Open in the map explorer** below a
 replayed map copies its settings into the explorer.
