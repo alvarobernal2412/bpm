@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.4.4",
+#     "marimo-pmprov[pdf]>=0.4.5",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -21,30 +21,29 @@ app = marimo.App(width="full")
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Loan applications: what do we know about a new application?
+    # Loan applications: lifecycles and outcomes with process maps
 
-    You will explore a real event log of a bank's loan approval process (the **BPI Challenge 2017**: 31,509 loan applications,
-    1.2 million events) and write down what you find. First you look at the log, then you use **process maps** to understand it.
+    In this notebook you answer Tasks 8, 9 and 10 of the assignment on the **BPI Challenge 2017** event log (31,509 loan
+    applications, 1.2 million events) with linear continuous process maps, and you write down your intents and findings as notes.
+    Work through the tutorial notebook first: it explains the elements of a map, its settings and how to write notes.
+
+    **The tasks**
+
+    - **Task 8.** Keep only the Loan Application lifecycle (all activities starting with `A_`) in the process map and write down at
+      least three interesting observations.
+    - **Task 9.** Repeat Task 8 for the Offer lifecycle: keep the activities starting with `O_`, but not `O_Create Offer`.
+    - **Task 10.** Create a visualization of the case outcome distribution of the log. The set of outcomes must be pairwise
+      mutually exclusive and complete. Briefly reflect on the result.
 
     **How to use this notebook**
 
     1. **Enter your key** below. If you worked here before, your earlier work comes back by itself.
-    2. **Take a first look** at the event log (section 1): its activities, its attributes and a few events.
-    3. **Explore with maps** (section 2): choose which activities to draw and press *Refresh visualization*.
-    4. **Write down what you find** in the side panel: press **Pick**, click the table or the map you mean, write your note and
-       press **Add**. Your notes are what you hand in.
+    2. **Look at the event log** (section 1): its size and its activities.
+    3. **Draw maps** with the map explorer (section 2): choose the settings and press **Refresh visualization**. Every map you
+       draw is recorded as a step of your analysis.
+    4. **Write your notes** in the side panel (section 3 explains how). Your notes are what you hand in.
 
-    Your work is saved automatically. You can close this page and come back with the same key.
-
-    **The three questions** (the background of the log is in `assignment.md`)
-
-    1. Which data (attributes) does the first activity, `A_Create Application`, carry?
-    2. Which of those attributes are sometimes empty?
-    3. Is any attribute used by more than one activity?
-
-    **A hint on maps.** A map shows the *order of activities*, not attributes. To use a map for an attribute question, tell the map
-    to draw only the events that have a value for that attribute: the activities in the map are then exactly the activities that
-    carry it.
+    Your work is saved automatically. You can close this page and continue later with the same key.
     """)
     return
 
@@ -52,12 +51,12 @@ def _(mo):
 @app.cell(hide_code=True)
 def _():
     import marimo as mo
+    import os as _os
     import shutil as _shutil
     import sys as _sys
     import tempfile as _tempfile
     import urllib.request as _request
     import warnings as _warnings
-    import os as _os
     from pathlib import Path
 
     from tracker import init_marimo
@@ -69,8 +68,6 @@ def _():
     from provenance_widget.sync import Sync
 
     def _folder_of_this_notebook():
-        # mo.notebook_location() is the folder of the notebook; if a platform returns something else, use the
-        # working directory, where the project's files are
         try:
             folder = Path(str(mo.notebook_location()))
             if folder.is_dir():
@@ -83,9 +80,8 @@ def _():
     RAW_URL = "https://raw.githubusercontent.com/alvarobernal2412/bpm/main/"
 
     def project_file(relative, refresh=False):
-        """A file of this project. Next to the notebook when the whole folder is there (a local checkout). A platform that
-        delivers only the notebook file, such as molab opening it from GitHub, does not bring the others, so they are
-        downloaded from the repository into a temporary folder (the log once, the small files each time, so they are current)."""
+        """A file of this project: next to the notebook in a local checkout, otherwise downloaded from the repository (molab
+        delivers only the notebook file). The log is downloaded once, the small files each time, so they are current."""
         local = HERE / relative
         if local.exists():
             return local
@@ -105,17 +101,16 @@ def _():
 
     kit.use_project_files(project_file)
 
-    # The course server that keeps each student's work. Set PMPROV_SYNC_URL to another address, or to an empty value to
-    # work without a server (the work then stays in ./provenance next to the notebook).
+    # The course server that keeps each student's work. Set PMPROV_SYNC_URL to another address, or to an empty value to work
+    # without a server (the work then stays in ./provenance next to the notebook).
     SYNC_URL = _os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com")
 
     # pmprov warns that its cell rewriting is not active; the steps are recorded explicitly with record() below
     _warnings.filterwarnings("ignore", message=r"init_marimo\(\) was called but patch_marimo_ast_compile")
-
     return (
         HERE,
-        PmprovAdapter,
         Path,
+        PmprovAdapter,
         ProvenancePanel,
         SYNC_URL,
         Sync,
@@ -139,10 +134,8 @@ def _(SYNC_URL, kit, mo):
 
 @app.cell(hide_code=True)
 def _(HERE, Path, SYNC_URL, Sync, key_box, kit, mo):
-    # With a server, nothing starts until there is a key; then the student's earlier work is brought back before
-    # anything opens the provenance database.
-    import os as _os
-
+    # With a server, nothing starts until there is a key; then the student's earlier work is brought back before anything opens
+    # the provenance database.
     sync = None
     if SYNC_URL:
         _key = (key_box.value.get("key") or "").strip()
@@ -152,7 +145,7 @@ def _(HERE, Path, SYNC_URL, Sync, key_box, kit, mo):
         sync.restore()
         mo.stop(sync.status.state == "unauthorized", mo.callout(mo.md(sync.status.message), kind="danger"))
     else:
-        PROVENANCE_DIR = Path(_os.environ.get("PMPROV_DIR") or HERE / "provenance")
+        PROVENANCE_DIR = Path(kit.os.environ.get("PMPROV_DIR") or HERE / "provenance")
     (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
     return PROVENANCE_DIR, sync
 
@@ -181,8 +174,8 @@ def _(PROVENANCE_DIR, mo, rt, zip_provenance):
 
     mo.vstack([
         mo.md(
-            "Your work is saved for you. If you also want a copy on your own computer, download it here "
-            "(it keeps every step, note, table and map, and is small)."
+            "Your work is saved for you. To keep a copy on your own computer as well, download it here "
+            "(the file contains every step, note, table and map)."
         ),
         mo.download(data=provenance_zip, filename="provenance.zip", label="Download a copy of my work"),
     ])
@@ -239,8 +232,8 @@ def _(adapter, describe_run, mo, save_tick, sync):
 
 @app.cell(hide_code=True)
 def _(adapter, kit, rt):
-    # Every step of the analysis goes through record(...): it runs the step and stores it, so the notes you write can be attached
-    # to the table or the map that produced them, and your work can be read back later step by step.
+    # Every step of the analysis goes through record(...): it runs the step and stores it, so that a note can be attached to the
+    # table or map that the step produced, and the analysis can be replayed step by step.
     record, state_of = kit.analyst_recorder(rt, adapter)
     return record, state_of
 
@@ -248,234 +241,138 @@ def _(adapter, kit, rt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 1. A first look at the event log
+    ## 1. The event log
 
-    An event log is a table with one row per **event**. Each event says *which case* it belongs to (here, one loan application),
-    *which activity* happened and *when*, plus further attributes. Before you draw anything, find out what is in it.
+    The line below gives the size of the log. The table lists every activity with its family (`A_`: a state of the application,
+    `O_`: a state of an offer, `W_`: a piece of work done by an employee), the number of events it has, the number of applications
+    (cases) in which it occurs and that number as a share of all applications.
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _(kit, mo, record):
-    event_log = record(["event_log"], kit.load_event_log, "data/bpi2017.parquet")
+    event_log = record(["event_log"], kit.load_event_log, kit.BPI2017)
     log_summary = record(["log_summary"], kit.summarise_log, event_log)
-    mo.md(f"""
-    **The log:** {log_summary['cases']:,} applications, {log_summary['events']:,} events, {log_summary['activities']} activities,
-    {log_summary['columns']} columns. This is the full log, not the smaller one.
-    """)
-    return event_log, log_summary
+    mo.md(
+        f"**The log:** {log_summary['cases']:,} applications, {log_summary['events']:,} events, "
+        f"{log_summary['activities']} activities, {log_summary['columns']} columns."
+    )
+    return (event_log,)
 
 
 @app.cell(hide_code=True)
 def _(event_log, kit, mo, record, show_table, state_of):
     activities = record(["activities"], kit.activity_overview, event_log)
-    _state = state_of("activities")
-    mo.vstack([
-        mo.md(
-            "**The activities.** Their names start with `A_` (the state of the application), `O_` (the state of an offer) or `W_` "
-            "(a piece of work done by an employee). How many events does each have, and in what share of the cases does it occur?"
-        ),
-        show_table(
-            mo.ui.table(activities, selection=None, pagination=None),
-            artifact_id=_state,
-            artifact_name="activity_overview",
-        ),
-    ])
-    return
-
-
-@app.cell(hide_code=True)
-def _(event_log, kit, mo, record, show_table, state_of):
-    attributes = record(["attributes"], kit.attribute_overview, event_log)
-    _state = state_of("attributes")
-    mo.vstack([
-        mo.md(
-            "**The attributes.** Every column of the log, with the number of events that have a value for it. "
-            "Which columns are filled on every event, and which only on a few?"
-        ),
-        show_table(
-            mo.ui.table(attributes, selection=None, pagination=None),
-            artifact_id=_state,
-            artifact_name="attribute_overview",
-        ),
-    ])
-    return
-
-
-@app.cell(hide_code=True)
-def _(event_log, kit, mo, record, show_table, state_of):
-    sample = record(["log_sample"], kit.log_sample, event_log, 100)
-    _state = state_of("log_sample")
-    mo.vstack([
-        mo.md("**The first events, as they are stored.** Scroll sideways and look at which columns have a value."),
-        show_table(
-            mo.ui.table(sample, selection=None, page_size=10),
-            artifact_id=_state,
-            artifact_name="log_sample",
-        ),
-    ])
+    show_table(
+        mo.ui.table(activities, selection=None, pagination=None),
+        artifact_id=state_of("activities"),
+        artifact_name="activity_overview",
+    )
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### The attributes of one activity
+    ## 2. Map explorer
 
-    Choose an activity to see, for each attribute, how many of **its** events have a value. The attributes with at least one value
-    are what that activity carries.
+    Choose the settings and press **Refresh visualization**. The line next to the button tells you whether the map on screen
+    matches the settings. The settings are explained in the tutorial notebook:
+
+    - **Abstraction:** set-based, last-activity-based or sequence-based.
+    - **Each path is:** a loan application, or one offer (the offer events grouped by `OfferID`).
+    - **Show self-loops** and **Show empty traces.**
+    - **Quick selection** and **Activities to draw:** the buttons select a whole family; the list below them can be edited.
+    - **Activity folding:** up to three folds, each with a name and the activities it replaces.
+
+    Every map you draw is a new step of your analysis, even when it repeats an earlier one. Maps with many activities (all of them,
+    or the workflow activities) take several seconds to draw.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(event_log, kit, mo):
-    _names = kit.distinct_activities(event_log)
-    get_coverage_view, set_coverage_view = mo.state(None)
-    coverage_activity = mo.ui.dropdown(options=_names, value="A_Create Application", label="Activity")
-    coverage_button = mo.ui.button(
-        label="Show its attributes", kind="success", on_click=lambda _: set_coverage_view(coverage_activity.value)
-    )
-    mo.hstack([coverage_activity, coverage_button], justify="start", gap=2, align="end")
-    return (get_coverage_view,)
-
-
-@app.cell(hide_code=True)
-def _(event_log, get_coverage_view, kit, mo, record, show_table, state_of):
-    _activity = get_coverage_view()
-    mo.stop(_activity is None, mo.md("*Choose an activity, then press the button.*"))
-    # a step you ask for is always recorded, even when you ask for the same one twice
-    coverage = record(["coverage"], kit.attribute_coverage, event_log, _activity, replay_stored=False)
-    _state = state_of("coverage")
-    mo.vstack([
-        mo.md(f"**Attributes of `{_activity}`:** {int((coverage['events with a value'] > 0).sum())} of {len(coverage)} have a value."),
-        show_table(
-            mo.ui.table(coverage, selection=None, pagination=None),
-            artifact_id=_state,
-            artifact_name="attributes_of_activity",
-        ),
-    ])
-    return
+def _(event_log, kit):
+    explorer_names = kit.distinct_activities(event_log)
+    explorer_notions = kit.case_notions_of(event_log)
+    return explorer_names, explorer_notions
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""
-    ## 2. Explore with process maps
+    # draft: what the controls are built from (changed by the quick selection); drawn: what the map shows (changed by Refresh)
+    get_draft, set_draft = mo.state(None)
+    get_drawn, set_drawn = mo.state(None)
+    return get_draft, get_drawn, set_draft, set_drawn
 
-    A **process map** (a Linear Continuous Process Mapper map) draws every case as a path from left to right. Cases that behave
-    alike share a path, and the **width of a band** is the number of cases that follow it. Hover over a band or a node for the
-    numbers, and drag the nodes to arrange the map.
 
-    Choose what to draw and press **Refresh visualization**:
+@app.cell(hide_code=True)
+def _(explorer_names, explorer_notions, get_draft, kit, mo):
+    map_controls = kit.map_controls(mo, explorer_names, get_draft() or {"activities": []}, explorer_notions)
+    return (map_controls,)
 
-    - **Activities:** a whole family (application states, offer states, workflow activities), all of them, or a list you pick.
-    - **Only events that have a value for:** keep only the events that carry one attribute. The map then shows exactly the
-      activities that carry it.
-    - **Map type:** *set-based* is the smallest and the easiest to read; the other two keep more detail and can be large.
-    """)
+
+@app.cell(hide_code=True)
+def _(explorer_names, kit, map_controls, mo, set_draft, set_drawn):
+    def _select(activities):
+        current = kit.settings_from(map_controls.value, explorer_names)
+        set_draft({**current, "activities": None if set(activities) == set(explorer_names) else activities})
+
+    preset_buttons = mo.ui.array(
+        [mo.ui.button(label=label, on_click=lambda _, a=acts: _select(a)) for label, acts in kit.activity_presets(explorer_names).items()]
+    )
+    refresh_button = mo.ui.button(
+        label="Refresh visualization", kind="success",
+        on_click=lambda _: set_drawn(kit.settings_from(map_controls.value, explorer_names)),
+    )
+    return preset_buttons, refresh_button
+
+
+@app.cell(hide_code=True)
+def _(explorer_names, explorer_notions, get_drawn, kit, map_controls, mo, preset_buttons, refresh_button):
+    _current = kit.settings_from(map_controls.value, explorer_names)
+    kit.controls_layout(
+        mo, map_controls, mo.hstack(list(preset_buttons), justify="start", gap=0.5), refresh_button,
+        kit.refresh_status(mo, _current, get_drawn()), show_case_notion=len(explorer_notions) > 1,
+    )
     return
 
 
 @app.cell(hide_code=True)
-def _(event_log, kit, mo):
-    _all_activities = kit.distinct_activities(event_log)
-    _attributes = [c for c in event_log.columns if c not in (kit.CASE_ID, kit.ACTIVITY, kit.TIMESTAMP)]
-    get_view, set_view = mo.state(None)
-    explorer_family = mo.ui.dropdown(
-        options={
-            "Application states (A_)": "A_",
-            "Offer states (O_)": "O_",
-            "Workflow activities (W_)": "W_",
-            "All activities": "",
-            "A list I choose": None,
-        },
-        value="Application states (A_)",
-        label="Activities",
-    )
-    explorer_pick = mo.ui.multiselect(options=_all_activities, value=[], label="My list (used when you choose “A list I choose”)")
-    explorer_attribute = mo.ui.dropdown(
-        options={"No filter: all events": None, **{name: name for name in sorted(_attributes)}},
-        value="No filter: all events",
-        label="Only events that have a value for",
-    )
-    explorer_builder = mo.ui.dropdown(
-        options={"Set-based": "set_based", "Sequence-based": "sequence_based", "Last-activity-based": "last_activity_based"},
-        value="Set-based",
-        label="Map type",
-    )
-    explorer_loops = mo.ui.switch(value=True, label="Show activities that repeat (self-loops)")
-    explorer_empty = mo.ui.switch(value=True, label="Show cases with no events left")
-
-    def _commit(_):
-        set_view(
-            {
-                "family": explorer_family.value,
-                "picked": list(explorer_pick.value),
-                "attribute": explorer_attribute.value,
-                "builder": explorer_builder.value,
-                "loops": explorer_loops.value,
-                "empty": explorer_empty.value,
-            }
-        )
-
-    explorer_refresh = mo.ui.button(label="Refresh visualization", kind="success", on_click=_commit)
-    mo.vstack([
-        mo.hstack([explorer_family, explorer_attribute, explorer_builder], justify="start", gap=2, align="end"),
-        explorer_pick,
-        mo.hstack([explorer_loops, explorer_empty], justify="start", gap=2),
-        explorer_refresh,
-    ])
-    return (get_view,)
-
-
-@app.cell(hide_code=True)
-def _(event_log, get_view, kit, mo, record):
-    _view = get_view()
-    mo.stop(_view is None, mo.md("*Choose what to draw, then press Refresh visualization.*"))
-
+def _(event_log, get_drawn, kit, mo, record):
+    _settings = get_drawn()
+    mo.stop(_settings is None, mo.md("*Choose the settings, then press Refresh visualization.*"))
+    _problems = kit.fold_problems(_settings)
+    mo.stop(bool(_problems), mo.callout(mo.md("  \n".join(_problems)), kind="danger"))
+    mo.stop(_settings["activities"] == [], mo.callout(mo.md("Select at least one activity."), kind="warn"))
     # every map you ask for is a new step, even when it repeats an earlier one
-    if _view["attribute"]:
-        explorer_log = record(["explorer_log"], kit.events_carrying, event_log, _view["attribute"], replay_stored=False)
-        explorer_activities = record(["explorer_activities"], kit.distinct_activities, explorer_log, replay_stored=False)
-    else:
-        explorer_log = record(["explorer_log"], kit.case_activity_timestamp, event_log, replay_stored=False)
-        explorer_activities = (
-            _view["picked"] if _view["family"] is None else kit.activities_starting_with(event_log, _view["family"])
+    try:
+        map_figure, map_meta = record(
+            ["map_figure", "map_meta"],
+            kit.draw_map, event_log, _settings["activities"], _settings["map_type"], _settings["allow_loops"],
+            _settings["show_empty"], _settings["folds"], _settings["case_notion"], 620,
+            name="draw_map", replay_stored=False,
         )
-    mo.stop(not explorer_activities, mo.callout(mo.md("Pick at least one activity for your list."), kind="warn"))
-    explorer_figure, explorer_meta = record(
-        ["explorer_figure", "explorer_meta"],
-        kit.draw_map, explorer_log, explorer_activities, _view["builder"], _view["loops"], _view["empty"], 650,
-        name="draw_explorer_map", replay_stored=False,
-    )
-    return explorer_activities, explorer_figure, explorer_meta
+    except ValueError as _error:
+        mo.stop(True, mo.callout(mo.md(str(_error)), kind="danger"))
+    return map_figure, map_meta
 
 
 @app.cell(hide_code=True)
-def _(explorer_activities, explorer_figure, explorer_meta, get_view, mo, show_chart, state_of):
-    _state = state_of("explorer_figure")
-    _nodes = explorer_meta["total_nodes"]
-    _attribute = get_view()["attribute"]
+def _(kit, map_figure, map_meta, mo, show_chart, state_of):
     mo.vstack([
-        mo.md(
-            (f"**Map of the events that have a value for `{_attribute}`.** " if _attribute else "**Map.** ")
-            + f"{len(explorer_activities)} {'activity' if len(explorer_activities) == 1 else 'activities'}: {', '.join(explorer_activities)}."
-        ),
+        mo.md(kit.describe_settings(map_meta["settings"])),
+        mo.md(kit.describe_map(map_meta)),
         mo.callout(
-            mo.md(
-                f"This map has **{_nodes:,} nodes**. A map this large is slow to draw, hover and annotate; "
-                "choose fewer activities or the set-based map type for a readable one."
-            ),
+            mo.md(f"Not in this log under this case notion, so not drawn: {', '.join(f'`{a}`' for a in map_meta['left_out'])}."),
+            kind="neutral",
+        ) if map_meta["left_out"] else mo.md(""),
+        mo.callout(
+            mo.md(f"This map has **{map_meta['total_nodes']:,} nodes**; select fewer activities or another abstraction for a readable map."),
             kind="warn",
-        ) if _nodes > 1000 else mo.md(f"{_nodes} nodes."),
-        show_chart(
-            mo.as_html(explorer_figure),
-            artifact_id=_state,
-            artifact_name="process_map",
-            figure=explorer_figure,
-        ),
+        ) if map_meta["total_nodes"] > 1000 else mo.md(""),
+        show_chart(mo.as_html(map_figure), artifact_id=state_of("map_figure"), artifact_name="process_map", figure=map_figure),
     ])
     return
 
@@ -483,16 +380,24 @@ def _(explorer_activities, explorer_figure, explorer_meta, get_view, mo, show_ch
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 3. Write down what you find
+    ## 3. Your notes
 
-    Your notes are your answers. For each of the three questions, attach a note to the table or the map that shows it:
+    Your notes are your answers, and each note is attached to the table or map it is about:
 
-    1. In the side panel press **Pick**, then click the table or the map (or a part of it) that you mean.
-    2. Write what it shows and why it answers the question, then press **Add**.
-    3. Add tags to group your notes, for example one per question.
+    1. In the side panel, press **Pick** and click the table or the map (or a part of it) that the note is about.
+    2. Write the note and add **tags**, separated by spaces: the kind of the note (`intent` or `finding`) and the task it belongs
+       to (`task8`, `task9` or `task10`), for example `finding task8`.
+    3. Press **Add**.
 
-    You can draw as many maps as you like: each one is a step in your analysis, and your notes stay attached to the step they were
-    written on. Everything is saved for you.
+    Write two kinds of notes, as in the tutorial:
+
+    - An **intent** carries the tag `intent` and states what a map is for and why you chose its settings. Write it right after the
+      map appears.
+    - A **finding** carries the tag `finding` and states what the map shows, with the numbers that support it (from the tooltips),
+      and what it means for the process.
+
+    Each map you draw stays a step of your analysis, and your notes stay attached to the step they were written on, so you can
+    draw a new map at any time without losing earlier notes.
     """)
     return
 
