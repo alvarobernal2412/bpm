@@ -202,24 +202,62 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ## 3. The settings of a map
+def _(kit, mo):
+    def _setting(title, text, figure):
+        return mo.vstack([mo.md(f"### {title}\n\n{text}"), kit.settings_figure(mo, figure)], gap=0.5)
 
-    | Setting | What it changes |
-    |---|---|
-    | **Abstraction: set-based** | A node is the *set* of activities a case has done so far, whatever their order. Different orders of the same activities meet in one node, and a repeated activity is drawn as a self-loop. |
-    | **Abstraction: last-activity-based** | A node is the *last* activity a case has done. This is the directly-follows graph: the smallest map, but a cycle can mean a repetition or only a different order. |
-    | **Abstraction: sequence-based** | A node is the exact *sequence* of activities so far. This is the prefix tree of the log: nothing is merged, so it is precise but can be very large. |
-    | **Activities to draw** | Only the selected activities are kept in every path; the others are removed. Selecting the states of one business object (an application, an offer) is the most effective way to make a map readable. The quick-selection buttons select a whole family of activities. |
-    | **Activity folding** | Several activities are drawn as one, under a name you choose (for example, all rejections as *Rejected*). A fold is drawn when at least one of its activities is selected. |
-    | **Show self-loops** | Whether activities that do not move a case to a new node are drawn as loops. |
-    | **Show empty traces** | Whether the cases with none of the selected activities are drawn as an `EMPTY TRACE` node. |
-    | **Each path is** | What a path stands for: a loan application, or one offer (the offer events grouped by `OfferID`). The recorded analysis on this page does not use it; the tasks do. |
+    mo.vstack([
+        mo.md(r"""
+        ## 3. The settings of a map
 
-    A map is drawn only when you press **Refresh visualization**; the line next to the button tells you whether the map on screen
-    matches the settings above it.
-    """)
+        These are the settings of the map explorer at the end of the page. In each figure the red box marks the control that changes
+        the setting, and the maps below it are the same log drawn with different values of it.
+        """),
+        _setting(
+            "Abstraction",
+            "What a node stands for. **Set-based:** the *set* of activities a case has done so far, whatever their order; different "
+            "orders of the same activities meet in one node and a repeated activity is a self-loop. **Last-activity-based:** the "
+            "*last* activity a case has done; this is the directly-follows graph, the smallest map, but a cycle can mean a repetition "
+            "or only a different order. **Sequence-based:** the exact *sequence* so far; this is the prefix tree of the log, nothing "
+            "is merged, so it is precise but can be very large.",
+            "settings-abstraction.png",
+        ),
+        _setting(
+            "Activities to draw",
+            "Only the selected activities are kept in every path; the others are removed. Selecting the states of one business "
+            "object (an application, an offer) is the most effective way to make a map readable. The **quick-selection buttons** "
+            "select a whole family of activities.",
+            "settings-activities.png",
+        ),
+        _setting(
+            "Activity folding",
+            "Several activities are drawn as one, under a name you choose (for example all rejections as *Rejected*). A fold is "
+            "drawn when at least one of its activities is selected, and an activity can be in one fold only.",
+            "settings-folding.png",
+        ),
+        _setting(
+            "Show self-loops",
+            "Whether activities that do not move a case to a new node are drawn as loops. Hidden, the map shows only how the cases "
+            "move on.",
+            "settings-loops.png",
+        ),
+        _setting(
+            "Show empty traces",
+            "Whether the cases with none of the selected activities are drawn as an `EMPTY TRACE` node. With few activities selected "
+            "this is most of the log, which is why the map shows it by default.",
+            "settings-empty.png",
+        ),
+        _setting(
+            "Each path is",
+            "What a path stands for: a loan application, or one offer (the offer events grouped by `OfferID`). The recorded analysis "
+            "on this page does not use it; the tasks do.",
+            "settings-notion.png",
+        ),
+        mo.md(r"""
+        A map is drawn only when you press **Refresh visualization**; the line next to the button tells you whether the map on screen
+        matches the settings above it.
+        """),
+    ], gap=1.5)
     return
 
 

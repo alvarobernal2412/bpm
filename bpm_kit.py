@@ -125,6 +125,11 @@ def project_path(name: str) -> Path:
     return Path(_locate(name)) if _locate else Path(__file__).resolve().parent / name
 
 
+def settings_figure(mo, name: str, width: int = 880):
+    """One of the figures of the tutorial (img/settings-*.png): a setting of the explorer, boxed, above the maps it produces."""
+    return mo.image(src=project_path(f"img/{name}").read_bytes(), width=width, rounded=True, alt=name.removesuffix(".png"))
+
+
 # --- the steps of the analysis ------------------------------------------------------------------------------------------------
 # Each is a plain function. A notebook runs it through record(), which stores its inputs and outputs as one step.
 
