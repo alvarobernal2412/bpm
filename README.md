@@ -49,7 +49,7 @@ TUTORIAL_KEY=... SOLUTION_KEY=... python build_histories.py --push   # also stor
 
 A reviewer notebook first asks the course server (with the read key in `BPM_TUTORIAL_KEY` or `BPM_SOLUTION_KEY`, or the key
 written in the notebook) and falls back to the zip in the repository. Both analyses are stored in the course `tutorial` as two
-students (`model-solution-2` holds the tutorial, `model-solution` the model solution). The keys are in the notebooks on purpose:
+students (`tutorial` holds the tutorial, `model-solution` the model solution). The keys are in the notebooks on purpose:
 once the course is closed they can only read. To change an analysis, reopen the course on the server's `/keys` page, push with its
 key, then close the course so that the analysis cannot be overwritten. `build_histories.py` writes the database in DuckDB's oldest storage format, because molab's DuckDB is older than the
 one a recent pmprov installs and refuses files written by a newer one.

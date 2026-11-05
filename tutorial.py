@@ -99,7 +99,7 @@ def _():
     # The course server keeps the recorded tutorial under a read key whose course is closed. Without a key, or when the server does
     # not answer, the copy in the repository (histories/tutorial.zip) is replayed.
     SYNC_URL = _os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com")
-    TUTORIAL_KEY = _os.environ.get("BPM_TUTORIAL_KEY", "model-solution-2-tutorial-h8dt4hjd")  # read key: its course is closed, so it cannot overwrite
+    TUTORIAL_KEY = _os.environ.get("BPM_TUTORIAL_KEY", "tutorial-tutorial-wm4cgp5w")  # read key: its course is closed, so it cannot overwrite
     return PmprovAdapter, ProvenancePanel, SYNC_URL, TUTORIAL_KEY, kit, mo, show_chart, show_table
 
 
