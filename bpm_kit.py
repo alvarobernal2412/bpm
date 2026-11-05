@@ -470,6 +470,16 @@ def analyst_recorder(rt, adapter):
     return record, state_of
 
 
+def last_map_settings(adapter):
+    """The settings of the last map that the stored history drew (None when it has none), so that a notebook that is opened again
+    can show the explorer as the student left it."""
+    keys = ("activities", "map_type", "allow_loops", "show_empty", "folds", "case_notion")
+    for node in reversed(list(adapter.get_tree().nodes.values())):
+        if node.operation.name == "draw_map":
+            return normalise_settings({k: node.params[k] for k in keys if k in node.params})
+    return None
+
+
 def reviewer_recorder(snap, mo):
     """`(record, state_of)` for someone reading a recorded analysis. `mo` is marimo: a cell whose step has not happened yet at the
     step the reviewer is on stops there and says so."""

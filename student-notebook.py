@@ -128,7 +128,7 @@ def _():
 @app.cell(hide_code=True)
 def _(SYNC_URL, kit, mo):
     key_box = mo.ui.anywidget(kit.KeyBox()) if SYNC_URL else None
-    mo.vstack([mo.md("### Your key"), key_box]) if key_box else mo.md("*Working without a server: your work stays in this notebook's folder.*")
+    mo.vstack([mo.md("### Your key"), key_box]) if key_box is not None else mo.md("*Working without a server: your work stays in this notebook's folder.*")
     return (key_box,)
 
 
@@ -300,11 +300,14 @@ def _(event_log, kit):
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    # draft: what the controls are built from (changed by the quick selection); drawn: what the map shows (changed by Refresh)
-    get_draft, set_draft = mo.state(None)
-    get_drawn, set_drawn = mo.state(None)
-    return get_draft, get_drawn, set_draft, set_drawn
+def _(adapter, kit, mo):
+    # draft: what the controls are built from (changed by the quick selection); drawn: what the map shows (changed by Refresh).
+    # When the page is opened again, the explorer comes back as the student left it: the settings of the last map in the stored
+    # history. That map is drawn again (it is already a step of the history, so it is not recorded a second time).
+    resume = {"settings": kit.last_map_settings(adapter)}
+    get_draft, set_draft = mo.state(resume["settings"])
+    get_drawn, set_drawn = mo.state(resume["settings"])
+    return get_draft, get_drawn, resume, set_draft, set_drawn
 
 
 @app.cell(hide_code=True)
@@ -340,20 +343,25 @@ def _(explorer_names, explorer_notions, get_drawn, kit, map_controls, mo, preset
 
 
 @app.cell(hide_code=True)
-def _(event_log, get_drawn, kit, mo, record):
+def _(event_log, get_drawn, kit, mo, panel, record, resume):
     _settings = get_drawn()
     mo.stop(_settings is None, mo.md("*Choose the settings, then press Refresh visualization.*"))
     _problems = kit.fold_problems(_settings)
     mo.stop(bool(_problems), mo.callout(mo.md("  \n".join(_problems)), kind="danger"))
     mo.stop(_settings["activities"] == [], mo.callout(mo.md("Select at least one activity."), kind="warn"))
     # every map you ask for is a new step, even when it repeats an earlier one
+    _args = (
+        event_log, _settings["activities"], _settings["map_type"], _settings["allow_loops"],
+        _settings["show_empty"], _settings["folds"], _settings["case_notion"], 620,
+    )
     try:
-        map_figure, map_meta = record(
-            ["map_figure", "map_meta"],
-            kit.draw_map, event_log, _settings["activities"], _settings["map_type"], _settings["allow_loops"],
-            _settings["show_empty"], _settings["folds"], _settings["case_notion"], 620,
-            name="draw_map", replay_stored=False,
-        )
+        if resume["settings"] is not None and kit.normalise_settings(_settings) == resume["settings"]:
+            resume["settings"] = None  # the map of the stored history, shown again: not a new step
+            map_figure, map_meta = kit.draw_map(*_args)
+        else:
+            resume["settings"] = None
+            map_figure, map_meta = record(["map_figure", "map_meta"], kit.draw_map, *_args, name="draw_map", replay_stored=False)
+            panel.refresh()  # so that the side panel knows the new step before the first annotation is written on it
     except ValueError as _error:
         mo.stop(True, mo.callout(mo.md(str(_error)), kind="danger"))
     return map_figure, map_meta
