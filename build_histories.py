@@ -1,7 +1,7 @@
 """Record the two analyses that the reviewer notebooks replay: the LC maps tutorial and the model solution of Tasks 8 to 10.
 
 Each analysis is made with the same steps as the student notebook (`bpm_kit.draw_map` and friends, through `record`), and its
-notes are written with the same panel adapter, so it replays exactly like a student's work. The numbers in the notes are computed
+annotations are written with the same panel adapter, so it replays exactly like a student's work. The numbers in the annotations are computed
 from the logs here, so they always match the maps.
 
     python build_histories.py                    # writes histories/tutorial.zip and histories/model-solution.zip
@@ -10,10 +10,10 @@ from the logs here, so they always match the maps.
 `--push` reads TUTORIAL_KEY and SOLUTION_KEY (and PMPROV_SYNC_URL, default https://provenance.alvispace.com). The course of each
 key must be open when you push; close it afterwards so that the stored analysis cannot be overwritten.
 
-Notes follow one convention, which the tutorial teaches: a note tagged `intent` says what a map is for and is written right after
-it appears; a note tagged `finding` says what a table or map shows. Every note carries one of these two tags, and then the tags
+Annotations follow one convention, which the tutorial teaches: an annotation tagged `intent` says what a map is for and is written right after
+it appears; an annotation tagged `finding` says what a table or map shows. Every annotation carries one of these two tags, and then the tags
 that group it: the technique in the tutorial (`rework`, `leakage`, ...), the task in the solution (`task8`, `task9`, `task10`).
-A note's tags belong to that note alone.
+An annotation's tags belong to that annotation alone.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", message=r"init_marimo\(\) was called but patch
 
 
 class Session:
-    """One recorded analysis: steps through `record`, notes through the panel adapter."""
+    """One recorded analysis: steps through `record`, annotations through the panel adapter."""
 
     def __init__(self, folder: Path, history_name: str):
         from provenance_widget.pmprov_adapter import PmprovAdapter
@@ -265,7 +265,7 @@ def build_solution(work: Path) -> Path:
     O = [a for a in names if a.startswith("O_") and a != "O_Create Offer"]
     n = summary["cases"]
 
-    # facts for the notes
+    # facts for the annotations
     ta = traces(log, lambda l: l[kit.ACTIVITY].str.startswith("A_"))
     short = ta.apply(lambda tr: [a[2:] for a in tr])
     no_submitted = int(short.apply(lambda tr: "Submitted" not in tr).sum())

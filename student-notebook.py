@@ -24,8 +24,8 @@ def _(mo):
     # Loan applications: lifecycles and outcomes with process maps
 
     In this notebook you answer Tasks 8, 9 and 10 of the assignment on the **BPI Challenge 2017** event log (31,509 loan
-    applications, 1.2 million events) with linear continuous process maps, and you write down your intents and findings as notes.
-    Work through the tutorial notebook first: it explains the elements of a map, its settings and how to write notes.
+    applications, 1.2 million events) with linear continuous process maps, and you write down your intents and findings as annotations.
+    Work through the tutorial notebook first: it explains the elements of a map, its settings and how to write annotations.
 
     **The tasks**
 
@@ -41,7 +41,7 @@ def _(mo):
     2. **Look at the event log** (section 1): its size and its activities.
     3. **Draw maps** with the map explorer (section 2): choose the settings and press **Refresh visualization**. Every map you
        draw is recorded as a step of your analysis.
-    4. **Write your notes** in the side panel (section 3 explains how). Your notes are what you hand in.
+    4. **Write your annotations** in the side panel (section 3 explains how). Your annotations are what you hand in.
 
     Your work is saved automatically. You can close this page and continue later with the same key.
     """)
@@ -167,7 +167,7 @@ def _(PROVENANCE_DIR, init_marimo, kit, relocate_artifacts):
 @app.cell(hide_code=True)
 def _(PROVENANCE_DIR, mo, rt, zip_provenance):
     def provenance_zip():
-        """The history as one small zip file: the steps and notes, and the values small enough to carry."""
+        """The history as one small zip file: the steps and annotations, and the values small enough to carry."""
         rt.storage._executor.submit(lambda: None).result()  # let the writes that are still queued land first
         data, _left_out = zip_provenance(PROVENANCE_DIR)
         return data
@@ -175,7 +175,7 @@ def _(PROVENANCE_DIR, mo, rt, zip_provenance):
     mo.vstack([
         mo.md(
             "Your work is saved for you. To keep a copy on your own computer as well, download it here "
-            "(the file contains every step, note, table and map)."
+            "(the file contains every step, annotation, table and map)."
         ),
         mo.download(data=provenance_zip, filename="provenance.zip", label="Download a copy of my work"),
     ])
@@ -221,7 +221,7 @@ def _(adapter, describe_run, mo, save_tick, sync):
                 mo.md(
                     "Some steps of your analysis ran more than once. "
                     + " ".join(describe_run(r) for r in _runs)
-                    + " Nothing was removed; this is only a note."
+                    + " Nothing was removed; this is only a remark."
                 ),
                 kind="warn",
             )
@@ -232,7 +232,7 @@ def _(adapter, describe_run, mo, save_tick, sync):
 
 @app.cell(hide_code=True)
 def _(adapter, kit, rt):
-    # Every step of the analysis goes through record(...): it runs the step and stores it, so that a note can be attached to the
+    # Every step of the analysis goes through record(...): it runs the step and stores it, so that an annotation can be attached to the
     # table or map that the step produced, and the analysis can be replayed step by step.
     record, state_of = kit.analyst_recorder(rt, adapter)
     return record, state_of
@@ -380,24 +380,24 @@ def _(kit, map_figure, map_meta, mo, show_chart, state_of):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 3. Your notes
+    ## 3. Your annotations
 
-    Your notes are your answers, and each note is attached to the table or map it is about:
+    Your annotations are your answers, and each annotation is attached to the table or map it is about:
 
-    1. In the side panel, press **Pick** and click the table or the map (or a part of it) that the note is about.
-    2. Write the note and add **tags**, separated by spaces: the kind of the note (`intent` or `finding`) and the task it belongs
+    1. In the side panel, press **Pick** and click the table or the map (or a part of it) that the annotation is about.
+    2. Write the annotation and add **tags**, separated by spaces: the kind of the annotation (`intent` or `finding`) and the task it belongs
        to (`task8`, `task9` or `task10`), for example `finding task8`.
     3. Press **Add**.
 
-    Write two kinds of notes, as in the tutorial:
+    Write two kinds of annotations, as in the tutorial:
 
     - An **intent** carries the tag `intent` and states what a map is for and why you chose its settings. Write it right after the
       map appears.
     - A **finding** carries the tag `finding` and states what the map shows, with the numbers that support it (from the tooltips),
       and what it means for the process.
 
-    Each map you draw stays a step of your analysis, and your notes stay attached to the step they were written on, so you can
-    draw a new map at any time without losing earlier notes.
+    Each map you draw stays a step of your analysis, and your annotations stay attached to the step they were written on, so you can
+    draw a new map at any time without losing earlier annotations.
     """)
     return
 

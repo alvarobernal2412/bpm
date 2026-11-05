@@ -24,7 +24,7 @@ def _(mo):
     # Model solution: Tasks 8, 9 and 10 with linear continuous process maps
 
     This notebook replays one way to answer Tasks 8, 9 and 10 of the assignment on the **BPI Challenge 2017** log (31,509 loan
-    applications). The analysis was made with the student notebook: every table and map below is one recorded step, and the notes
+    applications). The analysis was made with the student notebook: every table and map below is one recorded step, and the annotations
     in the side panel (intents and findings) were written on the table or map they are about. Open it after your own attempt.
 
     **The tasks**
@@ -39,7 +39,7 @@ def _(mo):
 
     - The arrows at the top of the panel (**First**, **Back**, **Next**, **Latest**) move through the analysis one step at a time.
       Every recorded table and map on this page shows its content *as it was at that step*.
-    - **Replay** on a note moves the analysis to the step the note was written on and highlights the table or map it refers to.
+    - **Replay** on an annotation moves the analysis to the step the annotation was written on and highlights the table or map it refers to.
     - Nothing on this page is recorded. The **map explorer** at the end of the page draws maps with any settings, and **Open in
       the map explorer** below a recorded map copies its settings there.
     """)

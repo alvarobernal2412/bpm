@@ -24,7 +24,7 @@ def _(mo):
     # Reviewer notebook: a student's Tasks 8, 9 and 10
 
     This notebook shows the work of one student in the **student notebook**, as a reviewer. Paste the student's key below. The
-    analysis, the tables and maps they produced and the notes they wrote (intents and findings) are then replayed here. Nothing
+    analysis, the tables and maps they produced and the annotations they wrote (intents and findings) are then replayed here. Nothing
     you do on this page changes the student's work: it is only read.
 
     **The tasks the student answered**
@@ -39,8 +39,8 @@ def _(mo):
 
     - The arrows at the top of the panel (**First**, **Back**, **Next**, **Latest**) move through the analysis one step at a time.
       Every recorded table and map on this page shows its content *as it was at that step*.
-    - **Replay** on a note moves the analysis to the step the note was written on and highlights the table or map it refers to.
-    - Notes are tagged with their kind (`intent`, `finding`) and the task they answer (`task8`, `task9`, `task10`).
+    - **Replay** on an annotation moves the analysis to the step the annotation was written on and highlights the table or map it refers to.
+    - Annotations are tagged with their kind (`intent`, `finding`) and the task they answer (`task8`, `task9`, `task10`).
     - The **map explorer** at the end of the page draws maps with any settings, to check a finding. Nothing drawn there is
       recorded, and **Open in the map explorer** below a recorded map copies its settings there.
     """)

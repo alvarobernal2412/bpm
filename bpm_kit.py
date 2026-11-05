@@ -464,7 +464,7 @@ def analyst_recorder(rt, adapter):
         return result
 
     def state_of(target):
-        """The recorded state that produced `target`: what a note about it is attached to."""
+        """The recorded state that produced `target`: what an annotation about it is attached to."""
         return produced.get(target) or adapter.latest_state_id() or "analysis"
 
     return record, state_of

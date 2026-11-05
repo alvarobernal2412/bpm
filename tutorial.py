@@ -37,9 +37,9 @@ def _(mo):
     - The arrows at the top of the panel (**First**, **Back**, **Next**, **Latest**) move through the recorded analysis one step
       at a time. Every recorded table and map on this page shows its content *as it was at that step*; a section whose step has not
       happened yet stays empty.
-    - Each note in the panel has a **Replay** button: it moves the analysis to the step the note was written on and highlights the
-      table or map the note refers to.
-    - Nothing on this page is recorded, and the notes cannot be changed here. You write your own notes in the student notebook.
+    - Each annotation in the panel has a **Replay** button: it moves the analysis to the step the annotation was written on and highlights the
+      table or map the annotation refers to.
+    - Nothing on this page is recorded, and the annotations cannot be changed here. You write your own annotations in the student notebook.
 
     **The data.** *BPI Challenge 2017* (van Dongen, B.F., 4TU.ResearchData,
     [doi:10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b](https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b)): the
@@ -267,7 +267,7 @@ def _(mo):
     ## 4. Patterns to look for
 
     The recorded analysis demonstrates mainstream vs. exceptional behavior, leakage, rework, folding and sequential variants, and
-    compares the abstractions; its notes are tagged with the name of the pattern. The other patterns (knockout structure, unexpected
+    compares the abstractions; its annotations are tagged with the name of the pattern. The other patterns (knockout structure, unexpected
     ordering, outcome distribution) are for you to look for in the tasks.
 
     | Pattern | How it appears in a map | Settings that show it best |
@@ -332,25 +332,25 @@ def _(mo):
     mo.md(r"""
     ## 6. Writing intents and findings
 
-    In the student notebook the side panel has a composer for notes. Your notes are what you hand in, so each note should be
+    In the student notebook the side panel has a composer for annotations. Your annotations are what you hand in, so each annotation should be
     attached to the table or map it is about:
 
-    1. Press **Pick** and click the table or the map (or a part of it) that the note is about.
-    2. Write the note and add **tags** (separated by spaces), starting with the kind of the note (see below).
-    3. Press **Add**. The note is attached to the step that produced the table or map, and it can be replayed from there.
+    1. Press **Pick** and click the table or the map (or a part of it) that the annotation is about.
+    2. Write the annotation and add **tags** (separated by spaces), starting with the kind of the annotation (see below).
+    3. Press **Add**. The annotation is attached to the step that produced the table or map, and it can be replayed from there.
 
-    The recorded analysis on this page uses two kinds of notes, and you should use them in the same way:
+    The recorded analysis on this page uses two kinds of annotations, and you should use them in the same way:
 
     - An **intent** carries the tag `intent` and states what a map is for: the question it should answer and why you chose its
       settings. Write it right after the map appears, before the findings.
     - A **finding** carries the tag `finding` and states what the map shows, with the numbers that support it (read them from the
       tooltips) and what they mean for the process.
 
-    A note can have more tags, to group it: here the pattern it shows (`rework`, `leakage`, ...); in your own notes the task it
-    answers (`task8`, `task9` or `task10`). The tags of a note belong to that note, so an intent and the findings written on the same
+    An annotation can have more tags, to group it: here the pattern it shows (`rework`, `leakage`, ...); in your own annotations the task it
+    answers (`task8`, `task9` or `task10`). The tags of an annotation belong to that annotation, so an intent and the findings written on the same
     map each show their own.
 
-    Step through the notes in the side panel and compare each intent with the settings of its map, and each finding with the map.
+    Step through the annotations in the side panel and compare each intent with the settings of its map, and each finding with the map.
     """)
     return
 

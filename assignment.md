@@ -1,7 +1,7 @@
 # Assignment: lifecycles and outcomes of a loan application
 
 Exploratory analysis of the **BPI Challenge 2017** event log, from Assignment 3 of *Introduction to Business Process Automation and
-Process Mining* (Tasks 8, 9 and 10). You do it in a notebook, with linear continuous process maps, and you hand in your **notes**.
+Process Mining* (Tasks 8, 9 and 10). You do it in a notebook, with linear continuous process maps, and you hand in your **annotations**.
 
 ## Context
 
@@ -35,13 +35,13 @@ An application can have several offers, but at most one offer is accepted per ap
    page and continue later with the same key.
 3. **Draw maps** with the map explorer: choose the activities, the abstraction, the folds and what a path stands for, and press
    *Refresh visualization*. Every map you draw is recorded as a step of your analysis.
-4. **Write your notes** in the side panel. Press **Pick**, click the map or table you mean, and write an *intent* (what the map is
-   for) and one or more *findings* (what it shows). Tag each note with its kind, `intent` or `finding`, and with its task:
+4. **Write your annotations** in the side panel. Press **Pick**, click the map or table you mean, and write an *intent* (what the map is
+   for) and one or more *findings* (what it shows). Tag each annotation with its kind, `intent` or `finding`, and with its task:
    `task8`, `task9` or `task10` (tags are separated by spaces, for example `finding task8`).
 
 ## What you hand in
 
-Your **notes**, each attached to the map or table that supports it. Every map you drew is recorded with its settings, so your notes
+Your **annotations**, each attached to the map or table that supports it. Every map you drew is recorded with its settings, so your annotations
 can be read together with the steps that produced them.
 
 ## After you have tried
