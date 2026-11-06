@@ -157,6 +157,16 @@ def family_of(activity: str) -> str:
     return _FAMILIES.get(activity[:2], "")
 
 
+def cell_text(value) -> str:
+    """A value as a marimo table prints it (whole numbers with thousands separators). A pinned cell records this text, and a
+    reviewer's Replay finds the cell again by it."""
+    from numbers import Integral
+
+    if isinstance(value, Integral) and not isinstance(value, bool):
+        return f"{int(value):,}"
+    return str(value).strip()
+
+
 def activity_overview(log: pd.DataFrame) -> pd.DataFrame:
     """Every activity with its family (when the log has families), how many events it has and in how many cases it occurs."""
     grouped = log.groupby(ACTIVITY)

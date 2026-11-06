@@ -60,19 +60,77 @@ class Session:
             kit.draw_map, log, activities, map_type, allow_loops, show_empty, folds or {}, case_notion, 620,
             name="draw_map", replay_stored=False,
         )
+        self.figure = figure
         return meta
 
+    # --- pins: the part of the current map, or the cell of a table, that a finding is about ----------------------------------
+    # They are recorded the way the picker records a click on that part (see the plugin's resolvers), so that a reviewer's Replay
+    # outlines it: a node by its label, a link as "source -> target (label)", a cell as "row N, column NAME = VALUE".
+
+    def _links(self):
+        sankey = self.figure.data[0]
+        labels = list(sankey.node.label)
+        return [
+            {"source": labels[a], "target": labels[b], "label": text, "value": value, "detail": f"{labels[a]} -> {labels[b]} ({text})"}
+            for a, b, text, value in zip(sankey.link.source, sankey.link.target, sankey.link.label, sankey.link.value)
+        ]
+
+    def link(self, activity=None, source=None, target=None, loop=None):
+        """The heaviest link of the map drawn for `activity` (and between `source` and `target`; a self-loop when `loop`)."""
+        hits = [
+            l for l in self._links()
+            if (activity is None or l["label"].startswith(activity + " ("))
+            and (source is None or l["source"] == source)
+            and (target is None or l["target"] == target)
+            and (loop is None or (l["source"] == l["target"]) == loop)
+        ]
+        assert hits, (activity, source, target, loop)
+        return "link", max(hits, key=lambda l: l["value"])["detail"]
+
+    def two_way_link(self):
+        """The heaviest link whose reverse is also drawn: a cycle between two nodes."""
+        links = self._links()
+        pairs = {(l["source"], l["target"]): l for l in links}
+        both = [l for l in links if l["source"] != l["target"] and (l["target"], l["source"]) in pairs]
+        assert both
+        best = max(both, key=lambda l: min(l["value"], pairs[(l["target"], l["source"])]["value"]))
+        return "link", best["detail"]
+
+    def node(self, label):
+        assert label in list(self.figure.data[0].node.label), label
+        return "node", label
+
+    def leakiest_node(self):
+        """The node where most paths end (the leakage of the tooltip)."""
+        sankey = self.figure.data[0]
+        leak = [c["leakage"] for c in sankey.node.customdata]
+        return "node", list(sankey.node.label)[max(range(len(leak)), key=leak.__getitem__)]
+
+    def cell(self, table, row_where: dict, column: str):
+        """The cell of `column` in the row of `table` (a DataFrame as the notebook shows it) whose values are `row_where`."""
+        rows = table
+        for name, value in row_where.items():
+            rows = rows[rows[name] == value]
+        assert len(rows) == 1, row_where
+        position = list(table.index).index(rows.index[0])
+        value = kit.cell_text(rows.iloc[0][column])
+        return "cell", f"row {position}, column {column} = {value}"
+
     def intent(self, target: str, artifact_name: str, text: str, tags=(), granularity="chart_selection"):
-        """Why a table or map was made. Written right after it appears, before the findings, and picked on it."""
-        self._note(target, artifact_name, text, ("intent", *tags), granularity)
+        """Why a table or map was made. Written right after it appears, before the findings, and picked on all of it."""
+        self._note(target, artifact_name, text, ("intent", *tags), granularity, None)
 
-    def finding(self, target: str, artifact_name: str, text: str, tags=(), granularity="chart_selection"):
-        """What a table or map shows, picked on it."""
-        self._note(target, artifact_name, text, ("finding", *tags), granularity)
+    def finding(self, target: str, artifact_name: str, text: str, tags=(), granularity="chart_selection", pin=None):
+        """What a table or map shows. `pin` is (granularity, detail) of the part of it that the finding is about, from `link`,
+        `node`, `leakiest_node`, `two_way_link` or `cell`; without it the finding is picked on all of the table or map."""
+        self._note(target, artifact_name, text, ("finding", *tags), granularity, pin)
 
-    def _note(self, target, artifact_name, text, tags, granularity):
+    def _note(self, target, artifact_name, text, tags, granularity, pin):
         state = self.state_of(target)
-        picked = [{"artifactId": state, "artifactName": artifact_name, "granularity": granularity}]
+        picked = {"artifactId": state, "artifactName": artifact_name, "granularity": granularity}
+        if pin:
+            picked["granularity"], picked["detail"] = pin
+        picked = [picked]
         self.adapter.persist_annotation(state, {"note": text, "tags": [{"name": t} for t in tags], "artifacts": picked})
 
     def finish(self, zip_path: Path) -> Path:
@@ -156,6 +214,7 @@ def build_tutorial(work: Path) -> Path:
     )
     s.finding(
         "activities", "activity_overview", granularity="dataset", tags=["first look"],
+        pin=s.cell(overview, {"activity": COMPLETE}, "events"),
         text=(
             f"The log has {n:,} loan applications and {summary['activities']} activities in three families: A_ (the state of the "
             f"application), O_ (the state of an offer) and W_ (work done by an employee). This tutorial maps only the {len(W)} W_ "
@@ -174,6 +233,7 @@ def build_tutorial(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["mainstream vs exceptional"],
+        pin=s.link(),
         text=(
             f"Every application performs {COMPLETE[2:]}, and {in_cases[CALL] / n * 100:.1f}% perform {CALL[2:]}; the thick bands of "
             f"the map are these two activities. The most common path is {' → '.join(a[2:] for a in main)} ({order.iloc[0]:,} "
@@ -184,6 +244,7 @@ def build_tutorial(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["leakage"],
+        pin=s.leakiest_node(),
         text=(
             f"Dark nodes mark where paths end ({meta['nodes_leakage_gt_0']} nodes; the tooltip gives the number). Most workflows end "
             f"after {VALIDATE[2:]} ({last[VALIDATE]:,}, {pct(last[VALIDATE], n)}), after {CALL[2:]} ({last[CALL]:,}, "
@@ -193,6 +254,7 @@ def build_tutorial(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["rework"],
+        pin=s.link(INCOMPLETE, loop=True),
         text=(
             f"Loops on a node mean that events of the same activity follow each other. Here they must be read with care: one piece "
             f"of work has several events, so a self-loop on {INCOMPLETE[2:]} or {VALIDATE[2:]} does not by itself say that the work "
@@ -208,6 +270,7 @@ def build_tutorial(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["abstractions"],
+        pin=s.two_way_link(),
         text=(
             f"The map has {meta_last['total_nodes']} nodes, against {nodes_all} in the set-based map: one node per activity, with "
             f"arrows for the activities that directly follow each other. It is the smallest map, but a cycle between two activities "
@@ -225,6 +288,7 @@ def build_tutorial(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["folding"],
+        pin=s.link("Rare workflow activities"),
         text=(
             f"The map shrinks from {nodes_all} to {meta_fold['total_nodes']} nodes. The fold is one band of {rare_cases:,} "
             f"applications ({pct(rare_cases, n)}) that perform at least one rare activity, which is easier to follow than three "
@@ -241,6 +305,7 @@ def build_tutorial(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["variants", "rework"],
+        pin=s.node("EMPTY TRACE"),
         text=(
             f"The sequence-based map is the prefix tree: every node is a distinct beginning of a path, so with one activity each step "
             f"to the right is one more event of it. {never:,} applications have none (the empty trace node). Among the others, the "
@@ -320,6 +385,7 @@ def build_solution(work: Path) -> Path:
     s.intent("map_figure", "process_map", tags=["task8"], text="Task 8: map only the application states (A_) with all of them selected, using the set-based abstraction.")
     s.finding(
         "map_figure", "process_map", tags=["task8"],
+        pin=s.link(),
         text=(
             f"Mainstream behavior: every application goes through Create Application, Concept and Accepted, and "
             f"{completed:,} ({pct(completed, n)}) also reach Complete, which forms the thick main band of the map. "
@@ -329,6 +395,7 @@ def build_solution(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["task8"],
+        pin=s.link("A_Cancelled"),
         text=(
             f"Knockout structure: {cancelled:,} applications are cancelled, {cancelled_after_complete:,} of them directly after "
             f"A_Complete, that is, while the bank waits for the customer to return the offer. {denied:,} applications are denied, "
@@ -338,6 +405,7 @@ def build_solution(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["task8"],
+        pin=s.link("A_Validating", loop=True),
         text=(
             f"Rework: {incomplete:,} applications ({pct(incomplete, n)}) reach A_Incomplete at least once, and "
             f"{validating_twice:,} are validated two or more times; the set-based map shows this repetition as self-loops."
@@ -347,6 +415,7 @@ def build_solution(work: Path) -> Path:
     s.intent("map_figure", "process_map", tags=["task8"], text="Task 8: check the transitions out of A_Incomplete in the last-activity abstraction.")
     s.finding(
         "map_figure", "process_map", tags=["task8"],
+        pin=s.link(source="A_Incomplete", target="A_Pending"),
         text=(
             f"Unexpected ordering: in {incomplete_pending:,} applications A_Incomplete is followed directly by A_Pending, without a "
             f"new A_Validating. According to the process description, missing documents should be checked again before the loan "
@@ -361,6 +430,7 @@ def build_solution(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["task9"],
+        pin=s.link("O_Created", loop=True),
         text=(
             f"With one path per application, the offers of an application are mixed in one path: there are {app_variants:,} "
             f"sequential variants, and a state such as O_Created can appear several times per path because an application can "
@@ -371,6 +441,7 @@ def build_solution(work: Path) -> Path:
     s.intent("map_figure", "process_map", tags=["task9"], text="Task 9: draw one path per offer instead (each path is an offer, grouped by OfferID) to see the lifecycle of a single offer.")
     s.finding(
         "map_figure", "process_map", tags=["task9"],
+        pin=s.link("O_Sent (mail and online)"),
         text=(
             f"Per offer, the map shows {offers:,} offers and only {offer_variants} variants. Every offer starts with O_Created and "
             f"is then sent, almost always by mail and online ({o_online_only:,} offers are sent online only). No offer state is "
@@ -379,6 +450,7 @@ def build_solution(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["task9"],
+        pin=s.link("O_Accepted"),
         text=(
             f"An offer ends accepted ({o_accepted:,}), cancelled ({o_cancelled:,}) or refused ({o_refused:,}). Acceptance always "
             f"follows O_Returned, whereas {o_cancel_unreturned:,} cancellations and {o_refused_unreturned:,} refusals happen "
@@ -394,6 +466,7 @@ def build_solution(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["task10"],
+        pin=s.node("{EMPTY TRACE}"),
         text=(
             f"No path reaches two of these states ({two_outcomes} applications), so the outcomes are mutually exclusive. The "
             f"empty trace node holds {no_outcome} applications without any of them; adding them as a fourth outcome, still "
@@ -402,6 +475,7 @@ def build_solution(work: Path) -> Path:
     )
     s.finding(
         "map_figure", "process_map", tags=["task10"],
+        pin=s.link("A_Cancelled"),
         text=(
             f"Outcome distribution: {pending:,} granted ({pct(pending, n)}), {cancelled:,} cancelled ({pct(cancelled, n)}), "
             f"{denied:,} denied ({pct(denied, n)}) and {no_outcome} still running ({pct(no_outcome, n)}). One application in three "
