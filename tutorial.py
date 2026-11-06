@@ -37,8 +37,8 @@ def _(mo):
     - The arrows at the top of the panel (**First**, **Back**, **Next**, **Latest**) move through the recorded analysis one step
       at a time. Every recorded table and map on this page shows its content *as it was at that step*; a section whose step has not
       happened yet stays empty.
-    - Each annotation in the panel has a **Replay** button: it moves the analysis to the step the annotation was written on and highlights the
-      table or map the annotation refers to.
+    - Each annotation in the panel has a **Replay** button: it moves the analysis to the step the annotation was written on and outlines what
+      the annotation refers to: the table or map, or the cell, node or link it points at.
     - Nothing on this page is recorded, and the annotations cannot be changed here. You write your own annotations in the student notebook.
 
     **The data.** *BPI Challenge 2017* (van Dongen, B.F., 4TU.ResearchData,
@@ -164,7 +164,7 @@ def _(kit, mo, record, show_table, state_of):
             f"{log_summary['activities']} activities."
         ),
         show_table(
-            mo.ui.table(activities, selection=None, pagination=None),
+            mo.ui.table(activities, selection=None, page_size=100),
             artifact_id=state_of("activities"),
             artifact_name="activity_overview",
         ),
@@ -335,7 +335,9 @@ def _(mo):
     In the student notebook the side panel has a composer for annotations. Your annotations are what you hand in, so each annotation should be
     attached to the table or map it is about:
 
-    1. Press **Pick** and click the table or the map (or a part of it) that the annotation is about.
+    1. Press **Pick** and click what the annotation is about. If it is about one thing, click that thing: a **cell** of a table, or a
+       **node** or a **link** (a band) of the map. The annotation then points at it, and a reviewer's Replay outlines exactly that element.
+       If it is about all of the table or map, click it anywhere else.
     2. Write the annotation and add **tags** (separated by spaces), starting with the kind of the annotation (see below).
     3. Press **Add**. The annotation is attached to the step that produced the table or map, and it can be replayed from there.
 
@@ -350,7 +352,10 @@ def _(mo):
     answers (`task8`, `task9` or `task10`). The tags of an annotation belong to that annotation, so an intent and the findings written on the same
     map each show their own.
 
-    Step through the annotations in the side panel and compare each intent with the settings of its map, and each finding with the map.
+    An **intent** is about the whole map, because it is about the settings. A **finding** is about one part of it, so the findings on this page
+    point at the node, link or cell they describe: press **Replay** on one and see what it outlines.
+
+    Step through the annotations in the side panel and compare each intent with the settings of its map, and each finding with the part of the map it points at.
     """)
     return
 

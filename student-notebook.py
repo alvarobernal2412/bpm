@@ -265,7 +265,7 @@ def _(kit, mo, record):
 def _(event_log, kit, mo, record, show_table, state_of):
     activities = record(["activities"], kit.activity_overview, event_log)
     show_table(
-        mo.ui.table(activities, selection=None, pagination=None),
+        mo.ui.table(activities, selection=None, page_size=100),
         artifact_id=state_of("activities"),
         artifact_name="activity_overview",
     )
@@ -392,7 +392,7 @@ def _(mo):
 
     Your annotations are your answers, and each annotation is attached to the table or map it is about:
 
-    1. In the side panel, press **Pick** and click the table or the map (or a part of it) that the annotation is about.
+    1. In the side panel, press **Pick** and click what the annotation is about: a cell of a table, a node or a link of the map, or anywhere else on it when the annotation is about all of it.
     2. Write the annotation and add **tags**, separated by spaces: the kind of the annotation (`intent` or `finding`) and the task it belongs
        to (`task8`, `task9` or `task10`), for example `finding task8`.
     3. Press **Add**.

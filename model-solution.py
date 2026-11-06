@@ -39,7 +39,7 @@ def _(mo):
 
     - The arrows at the top of the panel (**First**, **Back**, **Next**, **Latest**) move through the analysis one step at a time.
       Every recorded table and map on this page shows its content *as it was at that step*.
-    - **Replay** on an annotation moves the analysis to the step the annotation was written on and highlights the table or map it refers to.
+    - **Replay** on an annotation moves the analysis to the step the annotation was written on and outlines what it refers to: the table, the map, or the cell, node or link it points at.
     - Nothing on this page is recorded. The **map explorer** at the end of the page draws maps with any settings, and **Open in
       the map explorer** below a recorded map copies its settings there.
     """)
@@ -163,7 +163,7 @@ def _(kit, mo, record, show_table, state_of):
             f"{log_summary['activities']} activities."
         ),
         show_table(
-            mo.ui.table(activities, selection=None, pagination=None),
+            mo.ui.table(activities, selection=None, page_size=100),
             artifact_id=state_of("activities"),
             artifact_name="activity_overview",
         ),

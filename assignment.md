@@ -35,7 +35,7 @@ An application can have several offers, but at most one offer is accepted per ap
    page and continue later with the same key.
 3. **Draw maps** with the map explorer: choose the activities, the abstraction, the folds and what a path stands for, and press
    *Refresh visualization*. Every map you draw is recorded as a step of your analysis.
-4. **Write your annotations** in the side panel. Press **Pick**, click the map or table you mean, and write an *intent* (what the map is
+4. **Write your annotations** in the side panel. Press **Pick**, click the table cell, map node or map link you mean (or the map or table itself), and write an *intent* (what the map is
    for) and one or more *findings* (what it shows). Tag each annotation with its kind, `intent` or `finding`, and with its task:
    `task8`, `task9` or `task10` (tags are separated by spaces, for example `finding task8`).
 
