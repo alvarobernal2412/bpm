@@ -22,27 +22,6 @@ app = marimo.App(width="full")
 def _(mo):
     mo.md(r"""
     # Reviewer notebook: a student's Tasks 8, 9 and 10
-
-    This notebook shows the work of one student in the **student notebook**, as a reviewer. Paste the student's key below. The
-    analysis, the tables and maps they produced and the annotations they wrote (intents and findings) are then replayed here. Nothing
-    you do on this page changes the student's work: it is only read.
-
-    **The tasks the student answered**
-
-    - **Task 8.** Keep only the Loan Application lifecycle (all activities starting with `A_`) in the process map and write down at
-      least three interesting observations.
-    - **Task 9.** Repeat Task 8 for the Offer lifecycle: keep the activities starting with `O_`, but not `O_Create Offer`.
-    - **Task 10.** Create a visualization of the case outcome distribution of the log. The set of outcomes must be pairwise
-      mutually exclusive and complete. Briefly reflect on the result.
-
-    **How to use the side panel**
-
-    - The arrows at the top of the panel (**First**, **Back**, **Next**, **Latest**) move through the analysis one step at a time.
-      Every recorded table and map on this page shows its content *as it was at that step*.
-    - **Replay** on an annotation moves the analysis to the step the annotation was written on and outlines what it refers to: the table, the map, or the cell, node or link it points at.
-    - Annotations are tagged with their kind (`intent`, `finding`) and the task they answer (`task8`, `task9`, `task10`).
-    - The **map explorer** at the end of the page draws maps with any settings, to check a finding. Nothing drawn there is
-      recorded, and **Open in the map explorer** below a recorded map copies its settings there.
     """)
     return
 
@@ -167,18 +146,9 @@ def _(adapter, get_cursor, kit, mo, panel):
 
 
 @app.cell(hide_code=True)
-def _(mo, snap):
-    mo.callout(mo.md(f"{snap.banner()}  \nThis is the student's saved work, read from the course server. It cannot be changed here."), kind="info")
-    return
-
-
-@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 1. The event log
-
-    The first steps load the log and look at its attributes: the ones every event has (global), the ones only some activities fill
-    in (local), one row per case (case log) and the events as they are (raw events).
     """)
     return
 
@@ -229,10 +199,6 @@ def _(explorer_log, kit, mo, show_table, snap, state_of):
 def _(mo):
     mo.md(r"""
     ## 2. The recorded maps
-
-    This cell shows the map of the step the side panel is on, with the settings that drew it. Move through the steps to see the
-    maps the student drew one after another. **Open in the map explorer** copies the settings of the map into the map
-    explorer at the end of the page and draws it there, so that you can change them and compare.
     """)
     return
 
@@ -273,9 +239,6 @@ def _(kit, map_figure, map_meta, mo, open_in_explorer, show_chart, state_of):
 def _(mo):
     mo.md(r"""
     ## 3. Map explorer
-
-    Draw your own maps of the BPI 2017 log. Choose the settings and press **Refresh visualization**. The maps drawn here are not
-    recorded. Maps with many activities (all of them, or the workflow activities) take several seconds to draw.
     """)
     return
 
