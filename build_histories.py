@@ -324,7 +324,8 @@ def build_solution(work: Path) -> Path:
     s = Session(work / "model-solution", kit.HISTORY_NAME)
     log = s.record(["event_log"], kit.load_event_log, kit.BPI2017)
     summary = s.record(["log_summary"], kit.summarise_log, log)
-    overview = s.record(["activities"], kit.activity_overview, log)
+    s.record(["local_attributes"], kit.local_attributes, log)  # the tabs of the event log: global and raw events are the log itself
+    s.record(["case_log"], kit.case_log, log)
     names = kit.distinct_activities(log)
     A = [a for a in names if a.startswith("A_")]
     O = [a for a in names if a.startswith("O_") and a != "O_Create Offer"]
@@ -368,11 +369,11 @@ def build_solution(work: Path) -> Path:
 
     # first look
     s.intent(
-        "activities", "activity_overview", granularity="dataset",
+        "event_log", "raw_events", granularity="dataset",
         text="Get an overview of the activities of the log and of the three families before drawing a map.",
     )
     s.finding(
-        "activities", "activity_overview", granularity="dataset", tags=["first look"],
+        "event_log", "raw_events", granularity="dataset", tags=["first look"],
         text=(
             f"The log has {n:,} applications and {summary['activities']} activities: {len(A)} application states (A_), "
             f"{len(O) + 1} offer states (O_) and {len(names) - len(A) - len(O) - 1} workflow activities (W_). "

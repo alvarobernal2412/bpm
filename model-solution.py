@@ -22,26 +22,6 @@ app = marimo.App(width="full")
 def _(mo):
     mo.md(r"""
     # Model solution: Tasks 8, 9 and 10 with linear continuous process maps
-
-    This notebook replays one way to answer Tasks 8, 9 and 10 of the assignment on the **BPI Challenge 2017** log (31,509 loan
-    applications). The analysis was made with the student notebook: every table and map below is one recorded step, and the annotations
-    in the side panel (intents and findings) were written on the table or map they are about. Open it after your own attempt.
-
-    **The tasks**
-
-    - **Task 8.** Keep only the Loan Application lifecycle (all activities starting with `A_`) in the process map and write down at
-      least three interesting observations.
-    - **Task 9.** Repeat Task 8 for the Offer lifecycle: keep the activities starting with `O_`, but not `O_Create Offer`.
-    - **Task 10.** Create a visualization of the case outcome distribution of the log. The set of outcomes must be pairwise
-      mutually exclusive and complete. Briefly reflect on the result.
-
-    **How to use the side panel**
-
-    - The arrows at the top of the panel (**First**, **Back**, **Next**, **Latest**) move through the analysis one step at a time.
-      Every recorded table and map on this page shows its content *as it was at that step*.
-    - **Replay** on an annotation moves the analysis to the step the annotation was written on and outlines what it refers to: the table, the map, or the cell, node or link it points at.
-    - Nothing on this page is recorded. The **map explorer** at the end of the page draws maps with any settings, and **Open in
-      the map explorer** below a recorded map copies its settings there.
     """)
     return
 
@@ -136,37 +116,51 @@ def _(adapter, get_cursor, kit, mo, panel):
 
 
 @app.cell(hide_code=True)
-def _(mo, recorded_source, snap):
-    mo.callout(mo.md(f"{snap.banner()}  \nThe recorded analysis was read from {recorded_source}."), kind="info")
-    return
-
-
-@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 1. The event log
-
-    The first recorded steps load the log and count its activities. The table lists every activity with its family (`A_`, `O_`
-    or `W_`), the number of events it has, the number of applications (cases) in which it occurs and that number as a share of all
-    applications.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(kit, mo, record, show_table, state_of):
-    log_summary = record(["log_summary"], kit.summarise_log, None)
-    activities = record(["activities"], kit.activity_overview, None)
+def _(explorer_log, kit, mo, show_table, snap, state_of):
+    # Each view says by itself when its step has not happened yet at the step the side panel is on, so that the tables of earlier steps
+    # stay on the page (and can be pointed at) while the later ones wait.
+    def _later(name):
+        return snap.status(name) == "not_computed"
+
+    def _stored(name, again):
+        """What the step stored; drawn again from the live log when it was too large to travel with the student's work."""
+        value = snap.get(name) if snap.status(name) == "ok" else None
+        return value if value is not None else again()
+
+    def _view(name, build):
+        return mo.md(snap.missing(name)) if _later(name) else build()
+
+    _summary = snap.get("log_summary") if snap.status("log_summary") == "ok" else None
     mo.vstack([
         mo.md(
-            f"**The log:** {log_summary['cases']:,} cases, {log_summary['events']:,} events, "
-            f"{log_summary['activities']} activities."
+            f"**The log:** {_summary['cases']:,} cases, {_summary['events']:,} events, {_summary['activities']} activities."
+            if _summary
+            else "*The log has not been summarised at this step.*"
         ),
-        show_table(
-            mo.ui.table(activities, selection=None, page_size=100),
-            artifact_id=state_of("activities"),
-            artifact_name="activity_overview",
-        ),
+        mo.ui.tabs({
+            "Global Attributes": _view("event_log", lambda: show_table(
+                kit.log_table(mo, kit.global_attributes(explorer_log)), artifact_id=state_of("event_log"), artifact_name="global_attributes"
+            )),
+            "Local Attributes": _view("local_attributes", lambda: show_table(
+                kit.log_table(mo, _stored("local_attributes", lambda: kit.local_attributes(explorer_log)), page_size=30),
+                artifact_id=state_of("local_attributes"), artifact_name="local_attributes",
+            )),
+            "Case Log": _view("case_log", lambda: show_table(
+                kit.log_table(mo, _stored("case_log", lambda: kit.case_log(explorer_log))),
+                artifact_id=state_of("case_log"), artifact_name="case_log",
+            )),
+            "Raw Events": _view("event_log", lambda: show_table(
+                kit.log_table(mo, explorer_log), artifact_id=state_of("event_log"), artifact_name="raw_events"
+            )),
+        }),
     ])
     return
 
@@ -175,10 +169,6 @@ def _(kit, mo, record, show_table, state_of):
 def _(mo):
     mo.md(r"""
     ## 2. The recorded maps
-
-    This cell shows the map of the step the side panel is on, with the settings that drew it. Move through the steps to see the
-    maps of the analysis one after another. **Open in the map explorer** copies the settings of the map into the map
-    explorer at the end of the page and draws it there, so that you can change them and compare.
     """)
     return
 
@@ -219,9 +209,6 @@ def _(kit, map_figure, map_meta, mo, open_in_explorer, show_chart, state_of):
 def _(mo):
     mo.md(r"""
     ## 3. Map explorer
-
-    Draw your own maps of the BPI 2017 log. Choose the settings and press **Refresh visualization**. The maps drawn here are not
-    recorded. Maps with many activities (all of them, or the workflow activities) take several seconds to draw.
     """)
     return
 
