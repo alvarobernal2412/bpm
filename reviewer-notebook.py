@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.6.0",
+#     "marimo-pmprov[pdf]>=0.7.0",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -177,27 +177,50 @@ def _(mo):
     mo.md(r"""
     ## 1. The event log
 
-    The first steps load the log and count its activities. The table lists every activity with its family (`A_`, `O_`
-    or `W_`), the number of events it has, the number of applications (cases) in which it occurs and that number as a share of all
-    applications.
+    The first steps load the log and look at its attributes: the ones every event has (global), the ones only some activities fill
+    in (local), one row per case (case log) and the events as they are (raw events).
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(kit, mo, record, show_table, state_of):
-    log_summary = record(["log_summary"], kit.summarise_log, None)
-    activities = record(["activities"], kit.activity_overview, None)
+def _(explorer_log, kit, mo, show_table, snap, state_of):
+    # Each view says by itself when its step has not happened yet at the step the side panel is on, so that the tables of earlier steps
+    # stay on the page (and can be pointed at) while the later ones wait.
+    def _later(name):
+        return snap.status(name) == "not_computed"
+
+    def _stored(name, again):
+        """What the step stored; drawn again from the live log when it was too large to travel with the student's work."""
+        value = snap.get(name) if snap.status(name) == "ok" else None
+        return value if value is not None else again()
+
+    def _view(name, build):
+        return mo.md(snap.missing(name)) if _later(name) else build()
+
+    _summary = snap.get("log_summary") if snap.status("log_summary") == "ok" else None
     mo.vstack([
         mo.md(
-            f"**The log:** {log_summary['cases']:,} cases, {log_summary['events']:,} events, "
-            f"{log_summary['activities']} activities."
+            f"**The log:** {_summary['cases']:,} cases, {_summary['events']:,} events, {_summary['activities']} activities."
+            if _summary
+            else "*The log has not been summarised at this step.*"
         ),
-        show_table(
-            mo.ui.table(activities, selection=None, page_size=100),
-            artifact_id=state_of("activities"),
-            artifact_name="activity_overview",
-        ),
+        mo.ui.tabs({
+            "Global Attributes": _view("event_log", lambda: show_table(
+                kit.log_table(mo, kit.global_attributes(explorer_log)), artifact_id=state_of("event_log"), artifact_name="global_attributes"
+            )),
+            "Local Attributes": _view("local_attributes", lambda: show_table(
+                kit.log_table(mo, _stored("local_attributes", lambda: kit.local_attributes(explorer_log)), page_size=30),
+                artifact_id=state_of("local_attributes"), artifact_name="local_attributes",
+            )),
+            "Case Log": _view("case_log", lambda: show_table(
+                kit.log_table(mo, _stored("case_log", lambda: kit.case_log(explorer_log))),
+                artifact_id=state_of("case_log"), artifact_name="case_log",
+            )),
+            "Raw Events": _view("event_log", lambda: show_table(
+                kit.log_table(mo, explorer_log), artifact_id=state_of("event_log"), artifact_name="raw_events"
+            )),
+        }),
     ])
     return
 
