@@ -188,6 +188,81 @@ def distinct_activities(log: pd.DataFrame) -> list:
     return sorted(log[ACTIVITY].unique())
 
 
+# --- the views of the log (the tabs of the exploratory tool) -----------------------------------------------------------------------
+# Global attributes: the columns every event has (the activity, the case, the time and what every activity fills in). Local
+# attributes: what only some activities fill in. A case-level attribute has the same value in every event of its case, so it is
+# in the case log.
+
+MANDATORY_COLUMNS = [CASE_ID, ACTIVITY, TIMESTAMP]
+_classified: dict = {}
+
+
+def classify_columns(log: pd.DataFrame) -> dict:
+    """{"standard": columns every activity fills in, "case": columns with one value per case, "schema": activity -> its own columns}.
+    Worked out once per log: it reads the whole log."""
+    key = (id(log), log.shape)
+    if key not in _classified:
+        _classified.clear()
+        filled = log.groupby(ACTIVITY).count()  # per activity, how many events fill each column
+        standard = [c for c in filled.columns if (filled[c] != 0).all() and c not in MANDATORY_COLUMNS]
+        distinct_per_case = log.groupby(CASE_ID).nunique()
+        case = [c for c in log.columns if c != CASE_ID and distinct_per_case[c].max() <= 1]
+        schema = {
+            activity: [c for c in filled.columns if filled.loc[activity, c] != 0 and c not in MANDATORY_COLUMNS + standard]
+            for activity in filled.index
+        }
+        _classified[key] = {"standard": standard, "case": case, "schema": schema}
+    return _classified[key]
+
+
+def global_attributes(log: pd.DataFrame) -> pd.DataFrame:
+    """Every event with the attributes all events have: the case, the activity, the time and what every activity fills in
+    (the case-level attributes are in the case log)."""
+    found = classify_columns(log)
+    return log[[c for c in MANDATORY_COLUMNS + found["standard"] if c not in found["case"] or c in MANDATORY_COLUMNS]]
+
+
+def local_attributes(log: pd.DataFrame) -> pd.DataFrame:
+    """For every activity, how many of its events fill in each attribute that not every activity fills in. A zero means the
+    activity never uses that attribute."""
+    found = classify_columns(log)
+    filled = log.groupby(ACTIVITY).count()
+    local = [c for c in filled.columns if c not in MANDATORY_COLUMNS + found["standard"]]
+    return filled[local].rename_axis("activity").reset_index()
+
+
+def case_log(log: pd.DataFrame) -> pd.DataFrame:
+    """One row per case: how many events it has, when it started and ended, how long it took, and its case-level attributes."""
+    found = classify_columns(log)
+    grouped = log.groupby(CASE_ID)
+    table = pd.DataFrame({"no_of_events": grouped.size(), "start": grouped[TIMESTAMP].min(), "end": grouped[TIMESTAMP].max()})
+    table["duration"] = table["end"] - table["start"]
+    for column in found["case"]:
+        table[column] = grouped[column].first()
+    return table.reset_index()
+
+
+_SECONDS_PER_DAY = 86400.0
+
+
+def _days_text(value) -> str:
+    return "" if pd.isna(value) else str(pd.Timedelta(days=float(value)).round("us"))
+
+
+def log_table(mo, frame: pd.DataFrame, **kwargs):
+    """mo.ui.table over a view of the log. A duration column is stored as a number of days (marimo's table builder cannot take
+    timedeltas) and shown as the time it is. Everything is on pages of ten rows, so a log of a million events opens at once."""
+    durations = [c for c in frame.columns if pd.api.types.is_timedelta64_dtype(frame[c])]
+    if durations:
+        frame = frame.copy()
+        for column in durations:
+            frame[column] = frame[column].dt.total_seconds() / _SECONDS_PER_DAY
+        kwargs["format_mapping"] = {**{c: _days_text for c in durations}, **kwargs.get("format_mapping", {})}
+    kwargs.setdefault("selection", None)
+    kwargs.setdefault("page_size", 10)
+    return mo.ui.table(frame, **kwargs)
+
+
 # --- maps -----------------------------------------------------------------------------------------------------------------------
 # A map is drawn from the settings below. They are the same in all three notebooks, and every recorded map keeps the settings
 # that drew it (in its metadata), so a map seen in a replay can be opened again in the map explorer.

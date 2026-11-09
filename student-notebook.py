@@ -220,12 +220,20 @@ def _(kit, mo, record):
 
 @app.cell(hide_code=True)
 def _(event_log, kit, mo, record, show_table, state_of):
-    activities = record(["activities"], kit.activity_overview, event_log)
-    show_table(
-        mo.ui.table(activities, selection=None, page_size=100),
-        artifact_id=state_of("activities"),
-        artifact_name="activity_overview",
-    )
+    local_attributes = record(["local_attributes"], kit.local_attributes, event_log)
+    case_log = record(["case_log"], kit.case_log, event_log)
+    # the same events with fewer columns: an annotation on it points at the step that loaded the log
+    global_attributes = kit.global_attributes(event_log)
+    mo.ui.tabs({
+        "Global Attributes": show_table(
+            kit.log_table(mo, global_attributes), artifact_id=state_of("event_log"), artifact_name="global_attributes"
+        ),
+        "Local Attributes": show_table(
+            kit.log_table(mo, local_attributes, page_size=30), artifact_id=state_of("local_attributes"), artifact_name="local_attributes"
+        ),
+        "Case Log": show_table(kit.log_table(mo, case_log), artifact_id=state_of("case_log"), artifact_name="case_log"),
+        "Raw Events": show_table(kit.log_table(mo, event_log), artifact_id=state_of("event_log"), artifact_name="raw_events"),
+    })
     return
 
 
