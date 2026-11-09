@@ -23,26 +23,6 @@ def _(mo):
     mo.md(r"""
     # Loan applications: lifecycles and outcomes with process maps
 
-    In this notebook you answer Tasks 8, 9 and 10 of the assignment on the **BPI Challenge 2017** event log (31,509 loan
-    applications, 1.2 million events) with linear continuous process maps, and you write down your intents and findings as annotations.
-    Work through the tutorial notebook first: it explains the elements of a map, its settings and how to write annotations.
-
-    **The tasks**
-
-    - **Task 8.** Keep only the Loan Application lifecycle (all activities starting with `A_`) in the process map and write down at
-      least three interesting observations.
-    - **Task 9.** Repeat Task 8 for the Offer lifecycle: keep the activities starting with `O_`, but not `O_Create Offer`.
-    - **Task 10.** Create a visualization of the case outcome distribution of the log. The set of outcomes must be pairwise
-      mutually exclusive and complete. Briefly reflect on the result.
-
-    **How to use this notebook**
-
-    1. **Enter your key** below. If you worked here before, your earlier work comes back by itself.
-    2. **Look at the event log** (section 1): its size and its activities.
-    3. **Draw maps** with the map explorer (section 2): choose the settings and press **Refresh visualization**. Every map you
-       draw is recorded as a step of your analysis.
-    4. **Write your annotations** in the side panel (section 3 explains how). Your annotations are what you hand in.
-
     Your work is saved automatically. You can close this page and continue later with the same key.
     """)
     return
@@ -63,7 +43,7 @@ def _():
     from provenance_widget.pmprov_adapter import PmprovAdapter
     from provenance_widget.widget import ProvenancePanel
     from provenance_widget.display import show_chart, show_table
-    from provenance_widget.portable import relocate_artifacts, zip_provenance
+    from provenance_widget.portable import relocate_artifacts
     from provenance_widget.repeats import describe_run
     from provenance_widget.sync import Sync
 
@@ -121,14 +101,13 @@ def _():
         relocate_artifacts,
         show_chart,
         show_table,
-        zip_provenance,
     )
 
 
 @app.cell(hide_code=True)
 def _(SYNC_URL, kit, mo):
     key_box = mo.ui.anywidget(kit.KeyBox()) if SYNC_URL else None
-    mo.vstack([mo.md("### Your key"), key_box]) if key_box is not None else mo.md("*Working without a server: your work stays in this notebook's folder.*")
+    mo.vstack([mo.md("### Your key"), key_box]) if key_box is not None else mo.md("")
     return (key_box,)
 
 
@@ -162,24 +141,6 @@ def _(PROVENANCE_DIR, init_marimo, kit, relocate_artifacts):
         fresh=False,  # continue the stored history of this name after a restart
     )
     return (rt,)
-
-
-@app.cell(hide_code=True)
-def _(PROVENANCE_DIR, mo, rt, zip_provenance):
-    def provenance_zip():
-        """The history as one small zip file: the steps and annotations, and the values small enough to carry."""
-        rt.storage._executor.submit(lambda: None).result()  # let the writes that are still queued land first
-        data, _left_out = zip_provenance(PROVENANCE_DIR)
-        return data
-
-    mo.vstack([
-        mo.md(
-            "Your work is saved for you. To keep a copy on your own computer as well, download it here "
-            "(the file contains every step, annotation, table and map)."
-        ),
-        mo.download(data=provenance_zip, filename="provenance.zip", label="Download a copy of my work"),
-    ])
-    return
 
 
 @app.cell(hide_code=True)
@@ -226,7 +187,7 @@ def _(adapter, describe_run, mo, save_tick, sync):
                 kind="warn",
             )
         )
-    mo.vstack(_parts + [save_tick])
+    mo.vstack(_parts + [save_tick.style(display="none")])  # the timer has to be on the page to tick, but it is not a control
     return
 
 
@@ -242,10 +203,6 @@ def _(adapter, kit, rt):
 def _(mo):
     mo.md(r"""
     ## 1. The event log
-
-    The line below gives the size of the log. The table lists every activity with its family (`A_`: a state of the application,
-    `O_`: a state of an offer, `W_`: a piece of work done by an employee), the number of events it has, the number of applications
-    (cases) in which it occurs and that number as a share of all applications.
     """)
     return
 
@@ -276,18 +233,6 @@ def _(event_log, kit, mo, record, show_table, state_of):
 def _(mo):
     mo.md(r"""
     ## 2. Map explorer
-
-    Choose the settings and press **Refresh visualization**. The line next to the button tells you whether the map on screen
-    matches the settings. The settings are explained in the tutorial notebook:
-
-    - **Abstraction:** set-based, last-activity-based or sequence-based.
-    - **Each path is:** a loan application, or one offer (the offer events grouped by `OfferID`).
-    - **Show self-loops** and **Show empty traces.**
-    - **Quick selection** and **Activities to draw:** the buttons select a whole family; the list below them can be edited.
-    - **Activity folding:** up to three folds, each with a name and the activities it replaces.
-
-    Every map you draw is a new step of your analysis, even when it repeats an earlier one. Maps with many activities (all of them,
-    or the workflow activities) take several seconds to draw.
     """)
     return
 
@@ -382,31 +327,6 @@ def _(kit, map_figure, map_meta, mo, show_chart, state_of):
         ) if map_meta["total_nodes"] > 1000 else mo.md(""),
         show_chart(mo.as_html(map_figure), artifact_id=state_of("map_figure"), artifact_name="process_map", figure=map_figure),
     ])
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ## 3. Your annotations
-
-    Your annotations are your answers, and each annotation is attached to the table or map it is about:
-
-    1. In the side panel, press **Pick** and click what the annotation is about: a cell of a table, a node or a link of the map, or anywhere else on it when the annotation is about all of it.
-    2. Write the annotation and add **tags**, separated by spaces: the kind of the annotation (`intent` or `finding`) and the task it belongs
-       to (`task8`, `task9` or `task10`), for example `finding task8`.
-    3. Press **Add**.
-
-    Write two kinds of annotations, as in the tutorial:
-
-    - An **intent** carries the tag `intent` and states what a map is for and why you chose its settings. Write it right after the
-      map appears.
-    - A **finding** carries the tag `finding` and states what the map shows, with the numbers that support it (from the tooltips),
-      and what it means for the process.
-
-    Each map you draw stays a step of your analysis, and your annotations stay attached to the step they were written on, so you can
-    draw a new map at any time without losing earlier annotations.
-    """)
     return
 
 
