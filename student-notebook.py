@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.6.0",
+#     "marimo-pmprov[pdf]>=0.7.0",
 #     "linear-continuous-process-mapper>=0.1.0",
 #     "plotly>=7.1.0",
 #     "kaleido>=1.0.0",
@@ -147,7 +147,15 @@ def _(PROVENANCE_DIR, init_marimo, kit, relocate_artifacts):
 def _(PmprovAdapter, ProvenancePanel, rt):
     adapter = PmprovAdapter(rt)
     # the student can annotate, edit and export; there is no other mode in this notebook
-    panel = ProvenancePanel(source=adapter, mode="analyst", tabs=["curated"])
+    panel = ProvenancePanel(
+        source=adapter,
+        mode="analyst",
+        tabs=["curated"],
+        empty_hint=(
+            "No annotations yet. Press Pick, click the table or map (or a part of it) the annotation is about, write it with tags "
+            "(intent or finding, and task8, task9 or task10) and press Add."
+        ),
+    )
     return adapter, panel
 
 
