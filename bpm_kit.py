@@ -471,7 +471,15 @@ def fold_problems(settings: dict) -> list:
     return problems
 
 
-def controls_layout(mo, controls, preset_buttons, refresh_button, status, show_case_notion: bool):
+# The quick-selection buttons of the explorer (one per family of activities) are hidden unless BPM_QUICK_SELECTION=1, or a notebook
+# asks for them (the tutorial teaches them).
+SHOW_QUICK_SELECTION = os.environ.get("BPM_QUICK_SELECTION", "") == "1"
+
+
+def controls_layout(
+    mo, controls, preset_buttons, refresh_button, status, show_case_notion: bool, show_quick_selection: bool | None = None
+):
+    show_presets = SHOW_QUICK_SELECTION if show_quick_selection is None else show_quick_selection
     first_row = [controls["map_type"]] + ([controls["case_notion"]] if show_case_notion else [])
     first_row += [controls["allow_loops"], controls["show_empty"]]
     folds = mo.vstack(
@@ -481,7 +489,7 @@ def controls_layout(mo, controls, preset_buttons, refresh_button, status, show_c
     return mo.vstack(
         [
             mo.hstack(first_row, justify="start", gap=2, align="end", wrap=True),
-            mo.hstack([mo.md("Quick selection:"), preset_buttons], justify="start", gap=1, align="center"),
+            *([mo.hstack([mo.md("Quick selection:"), preset_buttons], justify="start", gap=1, align="center")] if show_presets else []),
             controls["activities"],
             mo.accordion({"Activity folding": folds}),
             mo.hstack([refresh_button, status], justify="start", gap=1, align="center"),

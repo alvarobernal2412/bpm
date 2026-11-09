@@ -418,6 +418,7 @@ def _(explorer_names, explorer_notions, get_drawn, kit, map_controls, mo, preset
     kit.controls_layout(
         mo, map_controls, mo.hstack(list(preset_buttons), justify="start", gap=0.5), refresh_button,
         kit.refresh_status(mo, _current, get_drawn()), show_case_notion=len(explorer_notions) > 1,
+        show_quick_selection=True,  # the tutorial teaches the buttons
     )
     return
 
