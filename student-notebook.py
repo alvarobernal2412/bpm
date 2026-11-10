@@ -152,7 +152,7 @@ def _(PmprovAdapter, ProvenancePanel, rt):
         mode="analyst",
         tabs=["curated"],
         empty_hint=(
-            "No annotations yet. Press Pick, click the table or map (or a part of it) the annotation is about, write it with tags "
+            "No annotations yet. Press Anchor, click the table or map (or a part of it) the annotation is about, write it with tags "
             "(intent or finding, and task8, task9 or task10) and press Add."
         ),
     )
