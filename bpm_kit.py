@@ -1,7 +1,7 @@
 """The code the three course notebooks share: loading the logs, drawing a map, the map controls, the key box, how a step is
 recorded and how a recorded analysis is opened for reading.
 
-`tutorial.py`, `student-notebook.py` and `model-solution.py` import this module. Keeping the steps here means that the notebook a
+`tutorial.py`, `lcmap-notebook-analysis.py` and `model-solution.py` import this module. Keeping the steps here means that the notebook a
 student works in and the notebooks that replay a recorded analysis call the same functions under the same names, so a recorded
 map can always be opened again in the map explorer with the settings that drew it.
 """
@@ -27,6 +27,8 @@ except Exception:
     os.getppid = os.getpid  # no parent process to look up (or no psutil, which is harmless)
 try:
     import lcm
+except ImportError:  # the initial-analysis notebooks use this module for the key box and the recorders, not for maps
+    lcm = None
 finally:
     os.getppid = _real_getppid
 
