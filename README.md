@@ -1,20 +1,24 @@
-# BPI 2017, Tasks 8 to 10: a tutorial, a student notebook and a model solution
+# BPI 2017 and Dhana loan applications: course notebooks
 
-Three [marimo](https://marimo.io) notebooks that teach and assess the reading of linear continuous process maps (the
+[marimo](https://marimo.io) notebooks. The LC maps ones teach and assess the reading of linear continuous process maps (the
 [`lcm`](https://github.com/alvarobernal2412/lc-maps) library, installed from PyPI as `linear-continuous-process-mapper`), with annotations
 written in the [`marimo-pmprov`](https://github.com/alvarobernal2412/marimo-pmprov) side panel and steps recorded with
 [`pmprov`](https://github.com/alvarobernal2412/pmprov). The tasks and the background of the log are in [`assignment.md`](assignment.md).
 
+There are two sets of notebooks. The **LC maps** set (BPI 2017, Tasks 8 to 10: `tutorial.py`, `lcmap-notebook-analysis.py`, `lcmap-notebook-review.py`, `model-solution.py`) teaches and assesses the reading of process maps. The **initial analysis** set (`initial-analysis.py`, `initial-review.py`) lets students explore one event log, the enriched Dhana LoanApplication log, before any process mining analysis.
+
 | Notebook | Panel mode | What it does |
 |---|---|---|
 | [`tutorial.py`](tutorial.py) | reviewer | Replays a recorded, annotated analysis of the workflow activities (`W_`) of the BPI 2017 log that demonstrates how to read the maps (mainstream vs. exceptional behavior, leakage, rework, folding, variants, the abstractions), with a reference of the map elements and settings, a guide to writing intents and findings, and a live map explorer. |
-| [`student-notebook.py`](student-notebook.py) | analyst | The student enters a **key**, looks at the log, draws maps with the map explorer (every map is a recorded step) and writes annotations. Work is saved to the course server under the key. |
+| [`lcmap-notebook-analysis.py`](lcmap-notebook-analysis.py) | analyst | The student enters a **key**, looks at the log, draws maps with the map explorer (every map is a recorded step) and writes annotations. Work is saved to the course server under the key. |
+| [`lcmap-notebook-review.py`](lcmap-notebook-review.py) | reviewer | The reviewer enters a **student's key** and sees that student's work from the student notebook (steps, maps, annotations) replayed, with the same live map explorer. The work is only read, never saved. |
 | [`model-solution.py`](model-solution.py) | reviewer | Replays the annotated solution of Tasks 8 to 10, with a live map explorer on the BPI 2017 log. |
-| [`reviewer-notebook.py`](reviewer-notebook.py) | reviewer | The reviewer enters a **student's key** and sees that student's work from the student notebook (steps, maps, annotations) replayed, with the same live map explorer. The work is only read, never saved. |
+| [`initial-analysis.py`](initial-analysis.py) | analyst | The student enters a **key** and explores the Dhana LoanApplication log, already loaded: log initialization (time zone, granularity, time frame, mandatory columns, global ordering), granularity and ordering analysis, the events view (global and local attributes, case inspection, case log with a code box to enrich it, raw events) and the activity schemas. Every choice is a recorded step, tables can be anchored and annotated in the side panel, and the annotations can be exported as a PDF. Work is saved to the course server under the key. |
+| [`initial-review.py`](initial-review.py) | reviewer | The reviewer enters a **student's key** and sees that student's work from `initial-analysis.py` replayed step by step: the choices they made, the tables at each step and their annotations. The work is only read, never saved. |
 
-In all the notebooks the map explorer offers the same settings: activities (with quick selection by family), abstraction
+In all the LC maps notebooks the map explorer offers the same settings: activities (with quick selection by family), abstraction
 (set-, last-activity- or sequence-based), up to three activity folds, self-loops, empty traces, and, for BPI 2017, whether a path is a
-loan application or an offer (sub-tracing by `OfferID`). In the two reviewer notebooks, **Open in the map explorer** below a
+loan application or an offer (sub-tracing by `OfferID`). In the two reviewer notebooks of that set, **Open in the map explorer** below a
 replayed map copies its settings into the explorer.
 
 | File | |
@@ -23,6 +27,10 @@ replayed map copies its settings into the explorer.
 | `build_histories.py` | Records the tutorial and the model solution (steps and annotations) and writes them to `histories/`; with `--push`, also stores them on the course server. |
 | `histories/tutorial.zip`, `histories/model-solution.zip` | The recorded analyses, replayed when the course server does not provide them. |
 | `data/bpi2017.parquet` | BPI Challenge 2017 (31,509 applications, 1,202,267 events, 19 columns), 25 MB. |
+| `data/dhana-loan-application.parquet` | The enriched Dhana LoanApplication log (20,343 applications, 761,372 events, 20 columns), 12 MB: colons in column names replaced by underscores (`time:timestamp` is `time_timestamp`) and a `case_lifecycle` column (`Application_652823628, complete`). |
+| `lib/` | The helper modules of the initial-analysis notebooks (`initial_analysis_kit.py`: the analysis stages as functions; the exploration utilities from [marimo-pm](https://github.com/hvoelzer/marimo-pm)). See [`lib/README.md`](lib/README.md). |
+| `scripts/xes_to_parquet.py` | Converts an XES log to the enriched parquet: `python -I scripts/xes_to_parquet.py <log.xes> <out.parquet>`. |
+| `tests/` | `pytest tests` (needs pandas, pyarrow, pytz; the recorder tests also need pmprov). |
 
 Each notebook starts with a `# /// script` header that lists its dependencies, so molab (or `marimo --sandbox`) builds the
 environment from it. Python 3.13 is needed (pmprov requires it).
@@ -30,11 +38,13 @@ environment from it. Python 3.13 is needed (pmprov requires it).
 ## Open on molab
 
 - Tutorial: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/tutorial.py
-- Student notebook: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/student-notebook.py
+- LC maps, student notebook: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/lcmap-notebook-analysis.py
 - Model solution: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/model-solution.py
-- Reviewer notebook (needs a student's key): https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/reviewer-notebook.py
+- LC maps, reviewer notebook (needs a student's key): https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/lcmap-notebook-review.py
+- Initial analysis: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/initial-analysis.py
+- Initial analysis, reviewer notebook (needs a student's key): https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/initial-review.py
 
-molab delivers only the notebook file, so each notebook downloads what else it needs (`bpm_kit.py`, a log, a recorded history)
+molab delivers only the notebook file, so each notebook downloads what else it needs (`bpm_kit.py`, `lib/`, a log, a recorded history)
 from `raw.githubusercontent.com/alvarobernal2412/bpm/main/`. On your own machine, with the folder checked out, nothing is
 downloaded.
 
@@ -68,3 +78,6 @@ tags beside the database).
 `data/bpi2017.parquet`: van Dongen, B.F., *BPI Challenge 2017*, 4TU.ResearchData,
 <https://doi.org/10.4121/uuid:5f3067df-f10b-45da-b98b-86ae4c7a310b>.
 It stays under the terms of the original dataset.
+
+`data/dhana-loan-application.parquet` is made from the *Dhana LoanApplication* XES log, a selection of the BPI Challenge 2017 log
+(20,343 of its applications, filed in 2016). It stays under the terms of the original dataset.

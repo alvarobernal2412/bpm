@@ -31,7 +31,7 @@ An application can have several offers, but at most one offer is accepted per ap
 
 1. **Work through the tutorial** (`tutorial.py`). It replays a short analysis of another part of the same log (the workflow activities) and explains the elements of a map,
    its settings, the patterns a map makes visible, and how to write intents and findings.
-2. **Open the student notebook** (`student-notebook.py`) and enter your key. Your work is saved automatically; you can close the
+2. **Open the student notebook** (`lcmap-notebook-analysis.py`) and enter your key. Your work is saved automatically; you can close the
    page and continue later with the same key.
 3. **Draw maps** with the map explorer: choose the activities, the abstraction, the folds and what a path stands for, and press
    *Refresh visualization*. Every map you draw is recorded as a step of your analysis.
@@ -47,3 +47,11 @@ can be read together with the steps that produced them.
 ## After you have tried
 
 The **model solution** (`model-solution.py`) replays an annotated analysis of the same three tasks. Open it after your own attempt.
+
+## Initial analysis of the log
+
+Before the tasks above, you can explore a log with the **initial analysis notebook** (`initial-analysis.py`). It loads the Dhana
+LoanApplication log for you and lets you initialize it (time zone, granularity, time frame, mandatory columns), check how its
+timestamps are ordered, look at its global and local attributes, its cases and its activity schemas, and enrich the case log with
+your own code. Enter your key, press **Anchor** in the side panel, click the table (or a cell of it) you mean and write what you
+found; **Export PDF** collects your annotations with the tables they are about.
