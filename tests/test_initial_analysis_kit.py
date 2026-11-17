@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -311,3 +313,110 @@ def test_step_state_id_is_the_last_step_of_that_name_up_to_the_cursor():
     assert kit.step_state_id(adapter, None, "build_case_log") == "s3"
     assert kit.step_state_id(adapter, "s2", "build_case_log") == "s1"
     assert kit.step_state_id(adapter, "s1", "initialize_log") is None
+
+
+# --- offers: more than one per case, and an offer as the case ---------------------------------------------------------------------
+
+
+def offer_log() -> pd.DataFrame:
+    t0 = pd.Timestamp("2016-01-01", tz="UTC")
+    rows = [  # case, activity, EventID, OfferID
+        ("c1", "A_Create", "Application_1", None),
+        ("c1", "O_Create Offer", "Offer_1", None),
+        ("c1", "O_Created", "OfferState_1", "Offer_1"),
+        ("c1", "O_Create Offer", "Offer_2", None),
+        ("c1", "O_Created", "OfferState_2", "Offer_2"),
+        ("c1", "O_Accepted", "OfferState_3", "Offer_2"),
+        ("c2", "A_Create", "Application_2", None),
+        ("c2", "O_Create Offer", "Offer_3", None),
+        ("c2", "O_Created", "OfferState_4", "Offer_3"),
+    ]
+    df = pd.DataFrame(rows, columns=[C, A, "EventID", "OfferID"])
+    df[T] = [t0 + pd.Timedelta(minutes=i) for i in range(len(df))]
+    return df
+
+
+def test_complete_offer_ids_gives_create_offer_events_their_offer():
+    ids = kit.complete_offer_ids(offer_log())
+    assert ids.tolist() == [None, "Offer_1", "Offer_1", "Offer_2", "Offer_2", "Offer_2", None, "Offer_3", "Offer_3"]
+
+
+def test_offers_per_case_counts_distinct_offers():
+    per_case = kit.offers_per_case(offer_log())
+    assert per_case.to_dict() == {"c1": 2, "c2": 1}
+
+
+def test_offer_distribution_says_how_many_cases_have_each_number_of_offers():
+    table = kit.offer_distribution(kit.offers_per_case(offer_log()))
+    assert table["offers per case"].tolist() == [1, 2]
+    assert table["cases"].tolist() == [1, 1]
+    assert table["% of cases"].tolist() == [50.0, 50.0]
+
+
+def test_offer_id_code_gives_every_offer_event_an_offer_id():
+    log = offer_log()
+    out = kit.enriched_log_from_code(log, None, kit.OFFER_ID_CODE)
+    offer_events = out[out[A].str.startswith("O_")]
+    assert offer_events["OfferID"].notna().all()  # O_Create Offer events now carry the id of their offer
+    assert out.loc[out[A] == "O_Create Offer", "OfferID"].tolist() == ["Offer_1", "Offer_2", "Offer_3"]
+    assert log["OfferID"].isna().sum() == 5  # the log the code ran on is left as it was
+
+
+def test_enriched_log_from_code_is_none_when_the_code_defines_none():
+    assert kit.enriched_log_from_code(offer_log(), None, "x = 1") is None
+
+
+def test_offer_id_code_makes_the_path_by_offer_cover_all_offer_events():
+    out = kit.to_lcm_log(kit.enriched_log_from_code(offer_log(), None, kit.OFFER_ID_CODE), "OfferID")
+    assert out["case:concept:name"].value_counts().to_dict() == {"Offer_2": 3, "Offer_1": 2, "Offer_3": 2}
+
+
+def test_to_lcm_log_can_use_another_attribute_as_the_case():
+    out = kit.to_lcm_log(offer_log(), "OfferID")
+    assert len(out) == 4  # only the events that have an OfferID; the O_Create Offer events have none
+    assert out["case:concept:name"].nunique() == 3
+    assert out["case:concept:name"].tolist() == ["Offer_1", "Offer_2", "Offer_2", "Offer_3"]
+
+
+def test_path_attribute_options_are_the_attributes_that_group_events_into_cases():
+    options = kit.path_attribute_options(offer_log())
+    assert options[0] == C  # the case id comes first
+    assert "OfferID" in options
+    assert A not in options and T not in options  # the activity and the time do not identify a path
+    assert "EventID" not in options  # unique per event: every path would be one event
+
+
+def test_to_lcm_log_renames_the_case_activity_and_time_columns():
+    out = kit.to_lcm_log(offer_log())
+    assert list(out.columns) == ["case:concept:name", "concept:name", "time:timestamp"]
+    assert len(out) == 9
+
+
+# --- several notebooks saving to one course server ---------------------------------------------------------------------------------
+
+
+def test_sync_url_names_the_notebook_in_the_address():
+    assert kit.sync_url("https://sync.example.org/", "map-explorer") == "https://sync.example.org/n/map-explorer"
+
+
+def test_session_folder_is_per_key_and_per_notebook():
+    a = kit.session_folder("key-1", "map-explorer")
+    assert a == kit.session_folder("key-1", "map-explorer")
+    assert a != kit.session_folder("key-1", "initial-analysis")  # two notebooks with one key never share a folder
+    assert a != kit.session_folder("key-2", "map-explorer")
+
+
+def test_write_notebook_info_records_the_notebook_and_a_hash_of_its_file(tmp_path):
+    notebook = tmp_path / "nb.py"
+    notebook.write_text("print('hello')")
+    folder = tmp_path / "prov"
+    kit.write_notebook_info(folder, "map-explorer", notebook, version="1.0")
+    info = json.loads((folder / "notebook.json").read_text())
+    assert info["notebook"] == "map-explorer" and info["version"] == "1.0"
+    assert info["sha256"] == hashlib.sha256(notebook.read_bytes()).hexdigest()
+
+
+def test_write_notebook_info_still_writes_when_the_file_cannot_be_read(tmp_path):
+    kit.write_notebook_info(tmp_path, "map-explorer", tmp_path / "missing.py")  # e.g. a hosted notebook that has no file on disk
+    info = json.loads((tmp_path / "notebook.json").read_text())
+    assert info["notebook"] == "map-explorer" and info["sha256"] is None

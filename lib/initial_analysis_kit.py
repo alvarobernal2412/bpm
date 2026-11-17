@@ -9,6 +9,9 @@ its input.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -21,6 +24,13 @@ ACTIVITY = "concept_name"
 TIMESTAMP = "time_timestamp"
 DHANA = "data/dhana-loan-application.parquet"
 HISTORY_NAME = "Dhana loan application initial analysis"
+MAP_EXPLORER_HISTORY_NAME = "Dhana loan application map explorer"
+
+# The identifiers the notebooks save under on the course server (course > student > notebook).
+INITIAL_ANALYSIS_NOTEBOOK = "initial-analysis"
+MAP_EXPLORER_NOTEBOOK = "map-explorer"
+OFFER_ID = "OfferID"
+CREATE_OFFER = "O_Create Offer"
 
 # a step that needs these can never lose them to the "constant column" rule (a log with one case has a constant case id)
 _PROTECTED = (CASE_ID, ACTIVITY, TIMESTAMP)
@@ -167,10 +177,15 @@ def build_case_log(
         for col in extra:
             cases[col] = folded[col]
     if enrichment_code:
-        scope = {"case_log": cases, "pd": pd, "event_log": log}
-        exec(enrichment_code, scope)
-        cases = scope["case_log"]
+        cases = run_enrichment(cases, log, enrichment_code)["case_log"]
     return cases
+
+
+def run_enrichment(case_log, event_log: pd.DataFrame, code: str) -> dict:
+    """Run the student's enrichment code with `case_log`, `event_log` and `pd` in scope; returns the scope the code left behind."""
+    scope = {"case_log": case_log, "pd": pd, "event_log": event_log}
+    exec(code, scope)
+    return scope
 
 
 def schema_views(
@@ -307,3 +322,98 @@ def analyst_recorder(rt, adapter):
         return produced.get(target) or (adapter.latest_state_id() if adapter is not None else None) or "analysis"
 
     return record, state_of
+
+
+# --- offers ---------------------------------------------------------------------------------------------------------------------
+# An application can have several offers. The events of an offer carry its OfferID, except the first one, O_Create Offer, whose
+# EventID is the offer's id.
+
+
+def complete_offer_ids(log: pd.DataFrame) -> pd.Series:
+    """The offer each event belongs to: its OfferID, and for O_Create Offer events their EventID; None for the rest."""
+    ids = log[OFFER_ID].astype(object).where(log[OFFER_ID].notna(), None)
+    create = log[ACTIVITY] == CREATE_OFFER
+    return ids.where(~create, log["EventID"].astype(object))
+
+
+def offers_per_case(log: pd.DataFrame, case_id: str = CASE_ID) -> pd.Series:
+    """How many distinct offers each case has."""
+    return complete_offer_ids(log).groupby(log[case_id]).nunique()
+
+
+def offer_distribution(per_case: pd.Series) -> pd.DataFrame:
+    """How many cases have one offer, two offers, ..."""
+    counts = per_case.value_counts().sort_index()
+    return pd.DataFrame({
+        "offers per case": counts.index.astype(int),
+        "cases": counts.to_numpy(),
+        "% of cases": (counts / counts.sum() * 100).round(1).to_numpy(),
+    })
+
+
+# What an analyst writes so that every offer event has an OfferID: the `O_Create Offer` events have none, but their EventID is the id
+# of their offer. The result is a copy of the event log with the completed OfferID.
+OFFER_ID_CODE = f"""offer_id = event_log['OfferID'].fillna(event_log['EventID'].where(event_log['{ACTIVITY}'] == 'O_Create Offer'))
+enriched_event_log = event_log.assign(OfferID=offer_id)"""
+
+
+def enriched_log_from_code(event_log: pd.DataFrame, case_log, code: str | None) -> pd.DataFrame | None:
+    """The `enriched_event_log` that the student's enrichment code defines (run with `event_log`, `case_log` and `pd` in scope), or
+    None when it defines none. An error in that code propagates."""
+    if not code:
+        return None
+    enriched = run_enrichment(case_log, event_log, code).get("enriched_event_log")
+    return enriched if isinstance(enriched, pd.DataFrame) else None
+
+
+def path_attribute_options(log: pd.DataFrame) -> list[str]:
+    """The attributes whose values can make up a path (a case) of the map: the case id first, then every other text attribute that
+    groups events (more than one value, and not one value per event). The activity and the time do not."""
+    options = [CASE_ID]
+    for col in log.columns:
+        if col in (CASE_ID, ACTIVITY, TIMESTAMP, "folded_data") or pd.api.types.is_datetime64_any_dtype(log[col]):
+            continue
+        if not (pd.api.types.is_string_dtype(log[col]) or pd.api.types.is_object_dtype(log[col])):
+            continue
+        distinct = log[col].nunique()
+        if 1 < distinct < 0.9 * len(log):
+            options.append(col)
+    return options
+
+
+def to_lcm_log(log: pd.DataFrame, case_column: str = CASE_ID) -> pd.DataFrame:
+    """The case, activity and time columns under the names the map library of `bpm_kit` reads. `case_column` is the attribute that
+    makes up a path: events without a value for it are left out."""
+    events = log[log[case_column].notna()]
+    return events[[case_column, ACTIVITY, TIMESTAMP]].rename(
+        columns={case_column: "case:concept:name", ACTIVITY: "concept:name", TIMESTAMP: "time:timestamp"}
+    )
+
+
+# --- saving to the course server, one notebook among several ------------------------------------------------------------------------
+
+
+def sync_url(base: str, notebook: str) -> str:
+    """The address a notebook saves to: the server's, with the notebook's own id in the path (the sync client adds /v1/provenance)."""
+    return f"{base.rstrip('/')}/n/{notebook}"
+
+
+def session_folder(key: str, notebook: str) -> Path:
+    """Where one student's work in one notebook lives while it runs: a folder per key and notebook, so two notebooks that share a
+    key (and a computer) never write into each other's provenance."""
+    return Path(tempfile.gettempdir()) / "bpm-provenance" / hashlib.sha256(f"{key}/{notebook}".encode()).hexdigest()[:16]
+
+
+def write_notebook_info(folder, notebook: str, source, version: str | None = None) -> Path:
+    """Say in `notebook.json`, inside the provenance folder that gets saved, which notebook this is and a hash of its file, so that
+    the course server can tell which version of the notebook made each saved revision. A notebook whose file cannot be read (a hosted
+    one) still says which notebook it is."""
+    try:
+        digest = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+    except Exception:
+        digest = None
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / "notebook.json"
+    target.write_text(json.dumps({"notebook": notebook, "sha256": digest, "version": version}), encoding="utf-8")
+    return target
