@@ -44,6 +44,23 @@ student's work is kept per notebook on the course server (course > student > not
 revision. The LC maps notebooks still save to the server's older address, which is the notebook `default`. This needs a version of
 [provenance-sync](https://github.com/alvarobernal2412/provenance-sync) with notebook addresses.
 
+## If something goes wrong
+
+Tell students the following. Most problems come from the notebook's session ending (the server restarted, the laptop went to sleep,
+the connection dropped), and a reload fixes them:
+
+- **marimo shows a red message** such as "Failed to fetch", "Failed update value", "Unauthorized" or a lost connection, or the page stops
+  responding: **reload the page.** The key is remembered on that computer (unless "Remember on this computer" was unticked), and
+  the work comes back as it was left: the choices, the maps and the annotations. If the key is asked for again, paste it again.
+- **"Not saved to the course server yet"** appears while the first save is on its way; if the course server cannot be reached, the work
+  stays on the computer and is saved when it can.
+- **The map explorer is slow or the page freezes.** It starts on the 5 most frequent activities. Drawing every activity (25 in this log)
+  makes a map of hundreds of nodes that takes about ten seconds and is heavy for the browser: choose fewer activities. Closing other
+  notebook tabs and heavy programs helps too.
+- **"None of the selected activities occurs…"** after choosing another attribute for *Each path is*: the message lists the activities that
+  do occur under that choice; select some of them and press *Refresh visualization*.
+- **"The key was not accepted"**: check that the key was pasted completely, or ask the instructor.
+
 ## Open on molab
 
 - Tutorial: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/tutorial.py
