@@ -15,6 +15,7 @@ There are two sets of notebooks. The **LC maps** set (BPI 2017, Tasks 8 to 10: `
 | [`model-solution.py`](model-solution.py) | reviewer | Replays the annotated solution of Tasks 8 to 10, with a live map explorer on the BPI 2017 log. |
 | [`initial-analysis.py`](initial-analysis.py) | analyst | The student enters a **key** and explores the Dhana LoanApplication log, already loaded: log initialization (time zone, granularity, time frame, mandatory columns, global ordering), granularity and ordering analysis, the events view (global and local attributes, case inspection, case log with a code box to enrich it, raw events) and the activity schemas. Every choice is a recorded step, tables can be anchored and annotated in the side panel, and the annotations can be exported as a PDF. Work is saved to the course server under the key. |
 | [`initial-review.py`](initial-review.py) | reviewer | The reviewer enters a **student's key** and sees that student's work from `initial-analysis.py` replayed step by step: the choices they made, the tables at each step and their annotations. The work is only read, never saved. |
+| [`map-explorer.py`](map-explorer.py) | analyst | The student enters a **key** and draws linear continuous process maps of the Dhana LoanApplication log with the map explorer. *Each path is* chooses the attribute whose values make up a path: the case id, or another attribute such as `OfferID` (one path per offer). Every map is a recorded step and can be anchored and annotated. |
 
 In all the LC maps notebooks the map explorer offers the same settings: activities (with quick selection by family), abstraction
 (set-, last-activity- or sequence-based), up to three activity folds, self-loops, empty traces, and, for BPI 2017, whether a path is a
@@ -35,6 +36,14 @@ replayed map copies its settings into the explorer.
 Each notebook starts with a `# /// script` header that lists its dependencies, so molab (or `marimo --sandbox`) builds the
 environment from it. Python 3.13 is needed (pmprov requires it).
 
+## Saving to the course server
+
+Each notebook that saves work has an identifier (`initial-analysis`, `map-explorer`) and saves to `<server>/n/<identifier>`, so a
+student's work is kept per notebook on the course server (course > student > notebook). Next to the work, the notebook saves a small
+`notebook.json` with its identifier and a hash of its file, so that the server knows which version of the notebook made each saved
+revision. The LC maps notebooks still save to the server's older address, which is the notebook `default`. This needs a version of
+[provenance-sync](https://github.com/alvarobernal2412/provenance-sync) with notebook addresses.
+
 ## Open on molab
 
 - Tutorial: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/tutorial.py
@@ -43,6 +52,7 @@ environment from it. Python 3.13 is needed (pmprov requires it).
 - LC maps, reviewer notebook (needs a student's key): https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/lcmap-notebook-review.py
 - Initial analysis: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/initial-analysis.py
 - Initial analysis, reviewer notebook (needs a student's key): https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/initial-review.py
+- Map explorer: https://molab.marimo.io/github/alvarobernal2412/bpm/blob/main/map-explorer.py
 
 molab delivers only the notebook file, so each notebook downloads what else it needs (`bpm_kit.py`, `lib/`, a log, a recorded history)
 from `raw.githubusercontent.com/alvarobernal2412/bpm/main/`. On your own machine, with the folder checked out, nothing is
