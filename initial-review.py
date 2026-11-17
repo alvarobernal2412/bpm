@@ -105,7 +105,7 @@ def _(SYNC_URL, Path, Sync, ak, key_box, kit, mo):
     _key = (key_box.value.get("key") or "").strip()
     mo.stop(not _key, mo.callout(mo.md("Paste the student's key above to start."), kind="info"))
     folder = Path(kit.tempfile.mkdtemp(prefix="bpm-review-")) / "provenance"
-    _sync = Sync(SYNC_URL, _key, folder)
+    _sync = Sync(ak.sync_url(SYNC_URL, ak.INITIAL_ANALYSIS_NOTEBOOK), _key, folder)
     _result = _sync.restore()
     mo.stop(
         _sync.status.state == "unauthorized",

@@ -133,20 +133,22 @@ def _(SYNC_URL, kit, mo):
 
 
 @app.cell(hide_code=True)
-def _(HERE, Path, SYNC_URL, Sync, key_box, kit, mo):
+def _(HERE, Path, SYNC_URL, Sync, ak, key_box, kit, mo):
     # With a server, nothing starts until there is a key; then the student's earlier work is brought back before anything opens
     # the provenance database.
     sync = None
     if SYNC_URL:
         _key = (key_box.value.get("key") or "").strip()
         mo.stop(not _key, mo.callout(mo.md("Enter your key above to start."), kind="info"))
-        PROVENANCE_DIR = kit.session_folder(_key)
-        sync = Sync(SYNC_URL, _key, PROVENANCE_DIR)
+        PROVENANCE_DIR = ak.session_folder(_key, ak.INITIAL_ANALYSIS_NOTEBOOK)
+        sync = Sync(ak.sync_url(SYNC_URL, ak.INITIAL_ANALYSIS_NOTEBOOK), _key, PROVENANCE_DIR)
         sync.restore()
         mo.stop(sync.status.state == "unauthorized", mo.callout(mo.md(sync.status.message), kind="danger"))
     else:
         PROVENANCE_DIR = Path(kit.os.environ.get("PMPROV_DIR") or HERE / "provenance")
     (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
+    # which notebook this is, and a hash of its file: saved with the work, so the course server knows what version made it
+    ak.write_notebook_info(PROVENANCE_DIR, ak.INITIAL_ANALYSIS_NOTEBOOK, globals().get("__file__"))
     return PROVENANCE_DIR, sync
 
 
