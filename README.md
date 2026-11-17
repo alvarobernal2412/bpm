@@ -16,6 +16,7 @@ There are two sets of notebooks. The **LC maps** set (BPI 2017, Tasks 8 to 10: `
 | [`initial-analysis.py`](initial-analysis.py) | analyst | The student enters a **key** and explores the Dhana LoanApplication log, already loaded: log initialization (time zone, granularity, time frame, mandatory columns, global ordering), granularity and ordering analysis, the events view (global and local attributes, case inspection, case log with a code box to enrich it, raw events) and the activity schemas. Every choice is a recorded step, tables can be anchored and annotated in the side panel, and the annotations can be exported as a PDF. Work is saved to the course server under the key. |
 | [`initial-review.py`](initial-review.py) | reviewer | The reviewer enters a **student's key** and sees that student's work from `initial-analysis.py` replayed step by step: the choices they made, the tables at each step and their annotations. The work is only read, never saved. |
 | [`map-explorer.py`](map-explorer.py) | analyst | The student enters a **key** and draws linear continuous process maps of the Dhana LoanApplication log with the map explorer. *Each path is* chooses the attribute whose values make up a path: the case id, or another attribute such as `OfferID` (one path per offer). Every map is a recorded step and can be anchored and annotated. |
+| [`lecture.py`](lecture.py) | none | The initial analysis for a lecture, as a plain marimo notebook: nothing is recorded and no key is needed. The first thing a student does is choose one of two event logs (Sepsis cases, `.xes`; Purchasing example, `.csv`), which are read in the format they came in. The rest is the same as `initial-analysis.py`. |
 
 In all the LC maps notebooks the map explorer offers the same settings: activities (with quick selection by family), abstraction
 (set-, last-activity- or sequence-based), up to three activity folds, self-loops, empty traces, and, for BPI 2017, whether a path is a
@@ -30,6 +31,7 @@ replayed map copies its settings into the explorer.
 | `data/bpi2017.parquet` | BPI Challenge 2017 (31,509 applications, 1,202,267 events, 19 columns), 25 MB. |
 | `data/dhana-loan-application.parquet` | The enriched Dhana LoanApplication log (20,343 applications, 761,372 events, 20 columns), 12 MB: colons in column names replaced by underscores (`time:timestamp` is `time_timestamp`) and a `case_lifecycle` column (`Application_652823628, complete`). |
 | `lib/` | The helper modules of the initial-analysis notebooks (`initial_analysis_kit.py`: the analysis stages as functions; the exploration utilities from [marimo-pm](https://github.com/hvoelzer/marimo-pm)). See [`lib/README.md`](lib/README.md). |
+| `data/SepsisCases2020EventLog.xes`, `data/Purchasing-Example.csv` | The two event logs of `lecture.py`, as they came in (Sepsis cases: 1,050 cases, 15,214 events; Purchasing example: 608 cases, 9,119 events). |
 | `scripts/xes_to_parquet.py` | Converts an XES log to the enriched parquet: `python -I scripts/xes_to_parquet.py <log.xes> <out.parquet>`. |
 | `tests/` | `pytest tests` (needs pandas, pyarrow, pytz; the recorder tests also need pmprov). |
 
@@ -108,3 +110,6 @@ It stays under the terms of the original dataset.
 
 `data/dhana-loan-application.parquet` is made from the *Dhana LoanApplication* XES log, a selection of the BPI Challenge 2017 log
 (20,343 of its applications, filed in 2016). It stays under the terms of the original dataset.
+
+`data/SepsisCases2020EventLog.xes`: Mannhardt, F., *Sepsis Cases - Event Log*, 4TU.ResearchData, <https://doi.org/10.4121/uuid:915d2bfb-7e84-49ad-a286-dc35f063a460>.
+Both logs stay under the terms of the original datasets.
