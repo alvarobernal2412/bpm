@@ -420,3 +420,83 @@ def test_write_notebook_info_still_writes_when_the_file_cannot_be_read(tmp_path)
     kit.write_notebook_info(tmp_path, "map-explorer", tmp_path / "missing.py")  # e.g. a hosted notebook that has no file on disk
     info = json.loads((tmp_path / "notebook.json").read_text())
     assert info["notebook"] == "map-explorer" and info["sha256"] is None
+
+
+# --- any log, with the same column names ------------------------------------------------------------------------------------------
+
+
+def test_normalise_log_replaces_colons_in_column_names():
+    log = pd.DataFrame({"case:concept:name": ["c1"], "concept:name": ["a"], "time:timestamp": [1], "Amount": [3]})
+    out = kit.normalise_log(log)
+    assert list(out.columns) == ["case_concept_name", "concept_name", "time_timestamp", "Amount"]
+    assert list(log.columns)[0] == "case:concept:name"  # the log it got is left as it was
+
+
+def test_normalise_log_adds_case_lifecycle_when_the_log_has_a_lifecycle():
+    log = pd.DataFrame({"case:concept:name": ["Application_1"], "lifecycle:transition": ["complete"]})
+    assert kit.normalise_log(log)["case_lifecycle"].tolist() == ["Application_1, complete"]
+
+
+def test_normalise_log_keeps_an_existing_case_lifecycle_and_adds_none_without_a_lifecycle():
+    done = pd.DataFrame({"case_concept_name": ["c"], "lifecycle_transition": ["complete"], "case_lifecycle": ["mine"]})
+    assert kit.normalise_log(done)["case_lifecycle"].tolist() == ["mine"]
+    plain = pd.DataFrame({"case:concept:name": ["c"], "concept:name": ["a"]})
+    assert "case_lifecycle" not in kit.normalise_log(plain).columns
+
+
+# --- reading a log in the format it came in, and guessing its mandatory columns --------------------------------------------------
+
+
+def test_read_log_reads_a_csv_and_parses_its_timestamp_columns(tmp_path):
+    path = tmp_path / "log.csv"
+    path.write_text("Case ID,Start Timestamp,Complete Timestamp,Activity\n1,2011/02/16 14:31:00.000,2011/02/16 15:23:00.000,Create\n")
+    out = kit.read_log(path)
+    assert pd.api.types.is_datetime64_any_dtype(out["Start Timestamp"]) and pd.api.types.is_datetime64_any_dtype(out["Complete Timestamp"])
+    assert out["Complete Timestamp"].iloc[0] == pd.Timestamp("2011-02-16 15:23:00")
+    assert out["Activity"].tolist() == ["Create"] and out["Case ID"].tolist() == [1]
+
+
+def test_read_log_leaves_text_columns_alone(tmp_path):
+    path = tmp_path / "log.csv"
+    path.write_text("Case ID,Time zone note,Activity\n1,not a time,Create\n")
+    assert kit.read_log(path)["Time zone note"].tolist() == ["not a time"]
+
+
+def test_read_log_reads_an_xes(tmp_path):
+    path = tmp_path / "log.xes"
+    path.write_text(
+        '<log><trace><string key="concept:name" value="c1"/><event><string key="concept:name" value="A"/>'
+        '<date key="time:timestamp" value="2016-01-01T10:00:00.000+01:00"/></event></trace></log>'
+    )
+    out = kit.read_log(path)
+    assert out["case:concept:name"].tolist() == ["c1"] and out["concept:name"].tolist() == ["A"]
+    assert str(out["time:timestamp"].dtype) == "datetime64[us, UTC]"
+
+
+def test_read_log_reads_a_parquet(tmp_path):
+    path = tmp_path / "log.parquet"
+    make_log().to_parquet(path)
+    assert len(kit.read_log(path)) == 7
+
+
+def test_read_log_refuses_an_unknown_format(tmp_path):
+    path = tmp_path / "log.txt"
+    path.write_text("x")
+    with pytest.raises(ValueError, match="csv, .xes or .parquet"):
+        kit.read_log(path)
+
+
+def test_guess_mandatory_finds_the_columns_of_the_course_logs():
+    assert kit.guess_mandatory([C, A, T, "x"], [T]) == {"case_id": C, "activity": A, "completion_time": T}
+
+
+def test_guess_mandatory_finds_a_case_id_an_activity_and_the_completion_time_by_their_names():
+    columns = ["Case ID", "Start Timestamp", "Complete Timestamp", "Activity", "Resource"]
+    guess = kit.guess_mandatory(columns, ["Start Timestamp", "Complete Timestamp"])
+    assert guess == {"case_id": "Case ID", "activity": "Activity", "completion_time": "Complete Timestamp"}
+
+
+def test_guess_mandatory_falls_back_to_the_first_columns_and_the_last_timestamp():
+    guess = kit.guess_mandatory(["a", "b", "c", "t1", "t2"], ["t1", "t2"])
+    assert guess == {"case_id": "a", "activity": "b", "completion_time": "t2"}
+    assert kit.guess_mandatory(["a", "b"], [])["completion_time"] is None

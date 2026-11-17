@@ -417,3 +417,63 @@ def write_notebook_info(folder, notebook: str, source, version: str | None = Non
     target = folder / "notebook.json"
     target.write_text(json.dumps({"notebook": notebook, "sha256": digest, "version": version}), encoding="utf-8")
     return target
+
+
+def normalise_log(log: pd.DataFrame) -> pd.DataFrame:
+    """Any event log with the column names of the course notebooks: colons in names become underscores (the marimo explorer breaks
+    on them), and a `case_lifecycle` column ("<case id>, <lifecycle>") is added when the log has a lifecycle and no such column yet."""
+    out = log.rename(columns=lambda name: str(name).replace(":", "_"))
+    if "case_lifecycle" not in out.columns and {CASE_ID, "lifecycle_transition"} <= set(out.columns):
+        out["case_lifecycle"] = out[CASE_ID].astype("string") + ", " + out["lifecycle_transition"].astype("string")
+    return out
+
+
+def read_log(path) -> pd.DataFrame:
+    """An event log in the format it came in: `.csv` (columns with a time or date in their name are read as timestamps), `.xes` (one
+    row per event, trace attributes as `case:` columns, see `xes_reader`) or `.parquet`."""
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix == ".parquet":
+        return pd.read_parquet(path)
+    if suffix == ".xes":
+        from xes_reader import read_xes
+
+        return read_xes(str(path))
+    if suffix == ".csv":
+        log = pd.read_csv(path)
+        for col in log.columns:
+            if not (pd.api.types.is_string_dtype(log[col]) or pd.api.types.is_object_dtype(log[col])):
+                continue
+            if "time" not in str(col).lower() and "date" not in str(col).lower():
+                continue
+            parsed = pd.to_datetime(log[col], errors="coerce")
+            if parsed.notna().mean() >= 0.9:  # a column that really holds times, not one that only has "time" in its name
+                log[col] = parsed
+        return log
+    raise ValueError(f"cannot read {path.name}: a log is a .csv, .xes or .parquet file")
+
+
+def guess_mandatory(columns: list, timestamp_columns: list) -> dict:
+    """The case id, activity and completion time columns of a log, found by their names (the course notebooks' own names first, then
+    names such as `Case ID`, `Activity` and `Complete Timestamp`); the first two columns and the last timestamp when nothing matches."""
+    columns, timestamps = list(columns), list(timestamp_columns)
+
+    def first(predicate):
+        return next((c for c in columns if predicate(str(c).lower())), None)
+
+    case_id = (
+        CASE_ID if CASE_ID in columns
+        else first(lambda c: "case" in c and ("id" in c or "name" in c))
+        or columns[0]
+    )
+    activity = (
+        ACTIVITY if ACTIVITY in columns
+        else first(lambda c: "activity" in c or c.endswith("concept_name") and "case" not in c)
+        or next((c for c in columns if c != case_id), columns[0])
+    )
+    completion = (
+        TIMESTAMP if TIMESTAMP in timestamps
+        else next((c for c in timestamps if "complete" in str(c).lower()), None)
+        or (timestamps[-1] if timestamps else None)
+    )
+    return {"case_id": case_id, "activity": activity, "completion_time": completion}
