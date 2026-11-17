@@ -27,7 +27,7 @@ def _(mo):
     mo.md(r"""
     # Map explorer
 
-    Your work is saved automatically. You can close this page and continue later with the same key.
+    Your work is saved automatically. You can close this page and continue later with the same key. If marimo shows a message that something failed, or the page stops responding, reload the page: your work comes back as you left it.
     """)
     return
 
@@ -149,7 +149,7 @@ def _(HERE, Path, SYNC_URL, Sync, ak, key_box, kit, mo):
         PROVENANCE_DIR = Path(kit.os.environ.get("PMPROV_DIR") or HERE / "provenance")
     (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
     # which notebook this is, and a hash of its file: saved with the work, so the course server knows what version made it
-    ak.write_notebook_info(PROVENANCE_DIR, ak.MAP_EXPLORER_NOTEBOOK, globals().get("__file__"))
+    _info_file = ak.write_notebook_info(PROVENANCE_DIR, ak.MAP_EXPLORER_NOTEBOOK, globals().get("__file__"))  # kept, so it is not shown
     return PROVENANCE_DIR, sync
 
 
@@ -252,12 +252,13 @@ def _(ak, kit, event_log):
 
 
 @app.cell(hide_code=True)
-def _(adapter, ak, explorer_names, explorer_notions, kit, mo):
-    # draft: what the controls are built from; drawn: what the map shows (changed by Refresh). The explorer starts on every activity of
-    # the log, or as the analyst left it (including what each path was).
+def _(adapter, ak, event_log, explorer_names, explorer_notions, kit, mo):
+    # draft: what the controls are built from; drawn: what the map shows (changed by Refresh). The explorer starts on the 5 most frequent
+    # activities (all 25 make a map of 342 nodes that takes ten seconds to draw and is slow to render in the browser) or
+    # as the analyst left it (including what each path was).
     _column = (ak.params_at(adapter, None, "to_lcm_log") or {}).get("case_column")
     _settings = kit.normalise_settings(
-        {**(kit.last_map_settings(adapter) or {}), "case_notion": _column if _column in explorer_notions.values() else ak.CASE_ID}
+        {**(kit.last_map_settings(adapter) or {"activities": sorted(event_log[ak.ACTIVITY].value_counts().index[:5])}), "case_notion": _column if _column in explorer_notions.values() else ak.CASE_ID}
     )
     get_draft, set_draft = mo.state(_settings)
     get_drawn, set_drawn = mo.state(_settings)
@@ -307,7 +308,8 @@ def _(ak, get_drawn, kit, event_log, mo, panel, record):
         )
         panel.refresh()  # so that the side panel knows the new step before the first annotation is written on it
     except ValueError as _error:
-        mo.stop(True, mo.callout(mo.md(str(_error)), kind="danger"))
+        _available = ", ".join(f"`{a}`" for a in sorted(lcm_log["concept:name"].unique()))
+        mo.stop(True, mo.callout(mo.md(f"{_error} The activities that occur when each path is `{path_column}` are: {_available}."), kind="danger"))
     return map_figure, map_meta, path_column
 
 
