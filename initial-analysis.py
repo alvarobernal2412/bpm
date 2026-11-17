@@ -27,7 +27,7 @@ def _(mo):
     the Dhana loan applications before doing any specific process mining analysis such as behavioral, conformance, performance, or
     deviance analysis. Every choice you make below is recorded as a step of your analysis.
 
-    Your work is saved automatically. You can close this page and continue later with the same key.
+    Your work is saved automatically. You can close this page and continue later with the same key. If marimo shows a message that something failed, or the page stops responding, reload the page: your work comes back as you left it.
     """)
     return
 
@@ -148,7 +148,7 @@ def _(HERE, Path, SYNC_URL, Sync, ak, key_box, kit, mo):
         PROVENANCE_DIR = Path(kit.os.environ.get("PMPROV_DIR") or HERE / "provenance")
     (PROVENANCE_DIR / "artifacts").mkdir(parents=True, exist_ok=True)
     # which notebook this is, and a hash of its file: saved with the work, so the course server knows what version made it
-    ak.write_notebook_info(PROVENANCE_DIR, ak.INITIAL_ANALYSIS_NOTEBOOK, globals().get("__file__"))
+    _info_file = ak.write_notebook_info(PROVENANCE_DIR, ak.INITIAL_ANALYSIS_NOTEBOOK, globals().get("__file__"))  # kept, so it is not shown
     return PROVENANCE_DIR, sync
 
 
