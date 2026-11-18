@@ -3,9 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pandas>=3.1.0",
-#     "pyarrow>=15",
 #     "altair>=5.5",
-#     "vegafusion>=2.0",
 #     "pytz",
 # ]
 # ///
@@ -72,12 +70,10 @@ def _():
         "temporal_characteristics_util", "data_quality_util", "display_util", "xes_reader", "initial_analysis_kit")]
     if str(_lib[0].parent) not in _sys.path:
         _sys.path.insert(0, str(_lib[0].parent))
-    import altair as alt
     import display_util as du
     import initial_analysis_kit as ak
     import temporal_characteristics_util as tcu
 
-    _registry = alt.data_transformers.enable("vegafusion")  # kept, so it is not shown
     return ak, du, mo, pd, project_file, tcu
 
 
