@@ -54,6 +54,10 @@ the connection dropped), and a reload fixes them:
 - **marimo shows a red message** such as "Failed to fetch", "Failed update value", "Unauthorized" or a lost connection, or the page stops
   responding: **reload the page.** The key is remembered on that computer (unless "Remember on this computer" was unticked), and
   the work comes back as it was left: the choices, the maps and the annotations. If the key is asked for again, paste it again.
+- **molab says "Failed to launch application" (or "kernel not found") in the app view.** The notebook itself is fine: use **Edit** to open
+  the same notebook in the editor and run it there, which starts even when the app view does not. The app view has to finish
+  installing the notebook's packages before it starts, so it fails first when a notebook needs many packages (the lecture notebook
+  therefore uses only a few).
 - **"Not saved to the course server yet"** appears while the first save is on its way; if the course server cannot be reached, the work
   stays on the computer and is saved when it can.
 - **The map explorer is slow or the page freezes.** It starts on the 5 most frequent activities. Drawing every activity (25 in this log)
