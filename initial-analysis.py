@@ -23,9 +23,8 @@ def _(mo):
     mo.md(r"""
     # Initial Event Log Analysis
 
-    This notebook integrates a set of patterns for initial event log analysis that are useful for exploring the raw event log data of
-    the Dhana loan applications before doing any specific process mining analysis such as behavioral, conformance, performance, or
-    deviance analysis. Every choice you make below is recorded as a step of your analysis.
+    This notebook integrates a set of patterns for initial event log analysis that are useful for exploring raw event log before doing any specific process mining analysis such as behavioral, conformance, performance, or
+    deviance analysis.
 
     Your work is saved automatically. You can close this page and continue later with the same key. If marimo shows a message that something failed, or the page stops responding, reload the page: your work comes back as you left it.
     """)
@@ -234,9 +233,6 @@ def _(adapter, ak, rt):
 def _(mo):
     mo.md(r"""
     ## Event Log
-
-    The event log of the loan applications is loaded for you. Every attribute with a colon in its name now uses an underscore instead
-    (`time:timestamp` is `time_timestamp`), and `case_lifecycle` combines the case id and the lifecycle of each event.
     """)
     return
 
