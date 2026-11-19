@@ -166,7 +166,8 @@ def build_case_log(
     log: pd.DataFrame, case_id: str, activity: str, completion_time: str, case_features: list, enrichment_code: str | None = None
 ) -> pd.DataFrame:
     """One row per case: start, end, number of events and the case-level attributes; then the student's enrichment code, if any,
-    run with `case_log` (and `pd`, `event_log`) in scope. An error in that code propagates."""
+    run with `case_log`, `event_log`, `pd` and the names of `enrichment_names` (`CASE_ID`, ...) in scope. An error in that code
+    propagates."""
     grouped = log.groupby(case_id)
     cases = grouped.agg(
         start_time=(completion_time, "first"), end_time=(completion_time, "last"), no_of_events=(activity, "count")
@@ -177,13 +178,20 @@ def build_case_log(
         for col in extra:
             cases[col] = folded[col]
     if enrichment_code:
-        cases = run_enrichment(cases, log, enrichment_code)["case_log"]
+        cases = run_enrichment(cases, log, enrichment_code, enrichment_names(case_id, activity, completion_time))["case_log"]
     return cases
 
 
-def run_enrichment(case_log, event_log: pd.DataFrame, code: str) -> dict:
-    """Run the student's enrichment code with `case_log`, `event_log` and `pd` in scope; returns the scope the code left behind."""
-    scope = {"case_log": case_log, "pd": pd, "event_log": event_log}
+def enrichment_names(case_id: str = CASE_ID, activity: str = ACTIVITY, completion_time: str = TIMESTAMP) -> dict:
+    """The notebook's variables that the student's code can use: the names of the three mandatory columns, as the notebook has
+    them (what the student picked, or the course's own). Add a name here and every notebook offers it."""
+    return {"CASE_ID": case_id, "ACTIVITY": activity, "COMPLETION_TIME": completion_time}
+
+
+def run_enrichment(case_log, event_log: pd.DataFrame, code: str, names: dict | None = None) -> dict:
+    """Run the student's enrichment code with `case_log`, `event_log`, `pd` and `names` (default: `enrichment_names()`) in scope;
+    returns the scope the code left behind."""
+    scope = {**(enrichment_names() if names is None else names), "case_log": case_log, "pd": pd, "event_log": event_log}
     exec(code, scope)
     return scope
 
@@ -357,12 +365,14 @@ OFFER_ID_CODE = f"""offer_id = event_log['OfferID'].fillna(event_log['EventID'].
 enriched_event_log = event_log.assign(OfferID=offer_id)"""
 
 
-def enriched_log_from_code(event_log: pd.DataFrame, case_log, code: str | None) -> pd.DataFrame | None:
-    """The `enriched_event_log` that the student's enrichment code defines (run with `event_log`, `case_log` and `pd` in scope), or
-    None when it defines none. An error in that code propagates."""
+def enriched_log_from_code(
+    event_log: pd.DataFrame, case_log, code: str | None, names: dict | None = None
+) -> pd.DataFrame | None:
+    """The `enriched_event_log` that the student's enrichment code defines (run as in `run_enrichment`), or None when it defines
+    none. An error in that code propagates."""
     if not code:
         return None
-    enriched = run_enrichment(case_log, event_log, code).get("enriched_event_log")
+    enriched = run_enrichment(case_log, event_log, code, names).get("enriched_event_log")
     return enriched if isinstance(enriched, pd.DataFrame) else None
 
 
