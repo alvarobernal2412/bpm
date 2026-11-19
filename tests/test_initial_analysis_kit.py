@@ -143,6 +143,28 @@ def test_build_case_log_runs_enrichment_code():
     assert (cases["x"] == 1).all()
 
 
+def test_enrichment_code_can_use_the_mandatory_column_names():
+    log, found = classified()
+    code = "case_log['n'] = event_log.groupby(CASE_ID)[ACTIVITY].count()\ncase_log['last'] = event_log.groupby(CASE_ID)[COMPLETION_TIME].max()"
+    cases = kit.build_case_log(log, C, A, T, found["case_features"], code)
+    assert (cases["n"] == cases["no_of_events"]).all()
+    assert (cases["last"] == cases["end_time"]).all()
+
+
+def test_enrichment_names_follow_the_columns_the_student_picked():
+    log, found = classified()
+    renamed = log.rename(columns={C: "my_case"})
+    code = "case_log['n'] = event_log.groupby(CASE_ID)[ACTIVITY].count()"
+    cases = kit.build_case_log(renamed, "my_case", A, T, found["case_features"], code)
+    assert (cases["n"] == cases["no_of_events"]).all()
+    assert kit.enrichment_names("c", "a", "t") == {"CASE_ID": "c", "ACTIVITY": "a", "COMPLETION_TIME": "t"}
+
+
+def test_the_replay_of_enrichment_code_has_the_names_too():
+    out = kit.enriched_log_from_code(offer_log(), None, "enriched_event_log = event_log[[CASE_ID, ACTIVITY]]")
+    assert list(out.columns) == [C, A]
+
+
 def test_build_case_log_enrichment_error_propagates():
     log, found = classified()
     with pytest.raises(NameError):
