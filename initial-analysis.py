@@ -23,10 +23,7 @@ def _(mo):
     mo.md(r"""
     # Initial Event Log Analysis
 
-    This notebook integrates a set of patterns for initial event log analysis that are useful for exploring raw event log before doing any specific process mining analysis such as behavioral, conformance, performance, or
-    deviance analysis.
-
-    Your work is saved automatically. You can close this page and continue later with the same key. If marimo shows a message that something failed, or the page stops responding, reload the page: your work comes back as you left it.
+    This notebook integrates a set of patterns for initial event log analysis that are useful for exploring the raw event log data before doing any specific process mining analysis such as behavioral, conformance, performance, or deviance analysis.
     """)
     return
 
@@ -592,7 +589,10 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(adapter, ak, mo):
-    _sample_enrichment = "case_log['no_offers_per_case'] = 'tbd'"
+    _sample_enrichment = (
+        "case_log['no_offers_per_case'] = event_log.groupby(CASE_ID)['OfferID'].nunique()\n"
+        "case_log['max_offered_amount_per_case'] = event_log.groupby(CASE_ID)['OfferedAmount'].max()"
+    )
     _resumed = (ak.params_at(adapter, None, "build_case_log") or {}).get("enrichment_code")
 
     # the code that was submitted last (what the case log is built with)
@@ -608,7 +608,11 @@ def _(adapter, ak, mo):
 
 @app.cell(hide_code=True)
 def _(case_enrichment_code_editor, mo, set_enrichment_code):
-    _intro = mo.md("Enrich the case log by hand.  The same, one level up. case_log carries the base case attributes, the applied case enrichments and the case-level attributes found in the log.")
+    _intro = mo.md(
+        "### Manual Case Log Enrichment\n\n"
+        "You can enrich the case log by hand, e.g., by aggregating values from the events grouped by case. "
+        "Check how the case log has changed after clicking 'submit'."
+    )
 
     case_enrichment_submit_button = mo.ui.button(
         label="Submit", on_click=lambda _: set_enrichment_code(case_enrichment_code_editor.value)
