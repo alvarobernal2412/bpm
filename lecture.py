@@ -79,7 +79,7 @@ def _():
     import initial_analysis_kit as ak
     import temporal_characteristics_util as tcu
 
-    du.enable_chart_builder()  # marimo's Visualize button on every table, also in the app
+    _ = du.enable_chart_builder()  # marimo's Visualize button on every table, also in the app (assigned: a bare call showed its True)
 
     return ak, du, mo, pd, project_file, tcu
 
