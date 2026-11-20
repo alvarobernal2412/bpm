@@ -524,6 +524,52 @@ def test_guess_mandatory_falls_back_to_the_first_columns_and_the_last_timestamp(
     assert kit.guess_mandatory(["a", "b"], [])["completion_time"] is None
 
 
+# --- the student's answer about sharing with the course server ----------------------------------------------------------------------
+
+
+def write_consent(home, **record):
+    folder = home / ".hs-marimo26"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "consent.json").write_text(json.dumps({"version": 1, "choice": "accepted", "at": "2026-11-20", **record}), encoding="utf8")
+
+
+SERVER = "https://provenance.alvispace.com"
+
+
+def test_without_an_answer_the_notebook_is_not_run_from_the_student_package_so_nothing_is_held_back(tmp_path):
+    assert kit.sharing_allowed(home=tmp_path) is True
+    assert kit.course_server(SERVER, home=tmp_path) == SERVER
+
+
+def test_an_accepted_answer_keeps_the_course_server(tmp_path):
+    write_consent(tmp_path, choice="accepted")
+    assert kit.course_server(SERVER, home=tmp_path) == SERVER
+
+
+def test_a_declined_answer_means_no_server_whatever_address_the_environment_gives(tmp_path):
+    write_consent(tmp_path, choice="declined")
+    assert kit.sharing_allowed(home=tmp_path) is False
+    assert kit.course_server(SERVER, home=tmp_path) == ""
+
+
+@pytest.mark.parametrize("record", [{"version": 0}, {"version": 2}, {"choice": "maybe"}, {"choice": None}])
+def test_an_answer_for_another_consent_text_or_an_unknown_one_does_not_count_as_accepted(tmp_path, record):
+    write_consent(tmp_path, **record)
+    assert kit.course_server(SERVER, home=tmp_path) == ""
+
+
+@pytest.mark.parametrize("content", ["{not json", "", "[]", "null", '{"version": 1}'])
+def test_an_unreadable_answer_does_not_count_as_accepted(tmp_path, content):
+    (tmp_path / ".hs-marimo26").mkdir()
+    (tmp_path / ".hs-marimo26" / "consent.json").write_text(content, encoding="utf8")
+    assert kit.course_server(SERVER, home=tmp_path) == ""
+
+
+def test_no_address_stays_no_address_even_when_sharing_was_accepted(tmp_path):
+    write_consent(tmp_path, choice="accepted")
+    assert kit.course_server("", home=tmp_path) == ""
+
+
 # --- notebooks ----------------------------------------------------------------------------------------------------------------------
 
 

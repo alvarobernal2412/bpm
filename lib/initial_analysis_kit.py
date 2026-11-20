@@ -412,6 +412,34 @@ def to_lcm_log(log: pd.DataFrame, case_column: str = CASE_ID) -> pd.DataFrame:
 # --- saving to the course server, one notebook among several ------------------------------------------------------------------------
 
 
+# The student package asks once whether a student's analyses may be shared with the course and keeps the answer in the student's home
+# folder (launcher/consent.py there). Its launcher already starts the notebooks without a server when the answer is no, but a notebook
+# started any other way on the same computer (a development copy, `marimo run` by hand) never sees that. So the notebooks read the
+# answer themselves: a recorded "no" holds whatever the environment says.
+CONSENT_VERSION = 1  # the version of the consent text an answer was given for; keep it equal to CONSENT_VERSION in launcher/consent.py
+
+
+def sharing_allowed(home=None) -> bool:
+    """Whether this student has agreed to share their analyses with the course server.
+
+    No answer file means the notebook does not run from the student package (a hosted or a development copy): there is no answer to
+    respect, so nothing is held back. A file that is unreadable, was given for another consent text, or says anything but "accepted"
+    counts as no."""
+    path = (Path(home) if home is not None else Path.home()) / ".hs-marimo26" / "consent.json"
+    if not path.exists():
+        return True
+    try:
+        record = json.loads(path.read_text(encoding="utf8"))
+        return record["version"] == CONSENT_VERSION and record["choice"] == "accepted"
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+def course_server(url: str, home=None) -> str:
+    """`url`, unless the student said no to sharing: then "" (no server, the work stays on this computer)."""
+    return url if url and sharing_allowed(home) else ""
+
+
 def sync_url(base: str, notebook: str) -> str:
     """The address a notebook saves to: the server's, with the notebook's own id in the path (the sync client adds /v1/provenance)."""
     return f"{base.rstrip('/')}/n/{notebook}"
