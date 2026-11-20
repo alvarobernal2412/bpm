@@ -522,3 +522,25 @@ def test_guess_mandatory_falls_back_to_the_first_columns_and_the_last_timestamp(
     guess = kit.guess_mandatory(["a", "b", "c", "t1", "t2"], ["t1", "t2"])
     assert guess == {"case_id": "a", "activity": "b", "completion_time": "t2"}
     assert kit.guess_mandatory(["a", "b"], [])["completion_time"] is None
+
+
+# --- notebooks ----------------------------------------------------------------------------------------------------------------------
+
+
+def test_no_notebook_cell_ends_with_a_bare_enable_chart_builder_call():
+    """marimo shows the last expression of a cell, and enable_chart_builder() returns True: written bare it printed "True" in the page."""
+    import ast
+
+    root = Path(__file__).resolve().parent.parent
+    for name in ("lecture.py", "initial-analysis.py", "map-explorer.py"):
+        for node in ast.parse((root / name).read_text(encoding="utf8")).body:
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            body = [stmt for stmt in node.body if not isinstance(stmt, ast.Return)]
+            last = body[-1] if body else None
+            bare = (
+                isinstance(last, ast.Expr)
+                and isinstance(last.value, ast.Call)
+                and getattr(last.value.func, "attr", getattr(last.value.func, "id", "")) == "enable_chart_builder"
+            )
+            assert not bare, f"{name}: a cell ends with a bare enable_chart_builder() and shows its True"
