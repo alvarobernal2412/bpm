@@ -96,7 +96,8 @@ def _():
 
     # The course server that keeps each student's work. Set PMPROV_SYNC_URL to another address, or to an empty value to work
     # without a server (the work then stays in ./provenance next to the notebook).
-    SYNC_URL = _os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com")
+    SYNC_URL = ak.course_server(_os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com"))
+    # (a student who said no to sharing has no server here, however the notebook was started: see ak.course_server)
 
     # pmprov warns that its cell rewriting is not active; the steps are recorded explicitly with record() below
     _warnings.filterwarnings("ignore", message=r"init_marimo\(\) was called but patch_marimo_ast_compile")
