@@ -25,8 +25,10 @@ def _value(kind: str, text: str):
     return text
 
 
-def read_xes(path: str) -> pd.DataFrame:
-    """One row per event; trace attributes as `case:<key>` columns; log-level attributes ignored."""
+def read_xes(path: str, verbatim: bool = False) -> pd.DataFrame:
+    """One row per event; trace attributes as `case:<key>` columns; log-level attributes ignored. With `verbatim` the keys are
+    columns exactly as written (a log that already uses the notebooks' column names, such as `case_concept_name`) and the
+    timestamp key is `time_timestamp`."""
     rows, trace_attrs, in_event, depth = [], {}, False, 0
     event: dict = {}
     for what, elem in ET.iterparse(path, events=("start", "end")):
@@ -48,13 +50,16 @@ def read_xes(path: str) -> pd.DataFrame:
             value = _value(tag, elem.attrib["value"])
             if in_event:
                 event[elem.attrib["key"]] = value
+            elif verbatim:
+                trace_attrs[elem.attrib["key"]] = value
             elif elem.attrib["key"] == "concept:name":
                 trace_attrs["case:concept:name"] = value
             else:
                 trace_attrs[f"case:{elem.attrib['key']}"] = value
     df = pd.DataFrame(rows)
+    stamp = "time_timestamp" if verbatim else "time:timestamp"
     for col in df.columns:
-        if df[col].dtype == object and col != "time:timestamp":
+        if df[col].dtype == object and col != stamp:
             df[col] = df[col].astype("string")
-    df["time:timestamp"] = pd.to_datetime(df["time:timestamp"], utc=True).astype("datetime64[us, UTC]")
+    df[stamp] = pd.to_datetime(df[stamp], utc=True).astype("datetime64[us, UTC]")
     return df
