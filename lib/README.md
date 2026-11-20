@@ -1,6 +1,6 @@
 # lib
 
-Helper modules of the initial-analysis notebooks (`initial-analysis.py`, `initial-review.py`).
+Helper modules of the initial-analysis notebooks (`01_initial-analysis.py`, `initial-review.py`).
 
 - `temporal_characteristics_util.py`, `data_quality_util.py`, `display_util.py`, `attribute_util.py`, `structure_util.py`: copied
   unchanged from [hvoelzer/marimo-pm](https://github.com/hvoelzer/marimo-pm), the exploratory tool the notebooks are derived from.

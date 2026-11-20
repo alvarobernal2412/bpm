@@ -166,7 +166,7 @@ def _(adapter, cursor_state, mo, show_recorded_charts):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    This notebook replays the work a student did in `initial-analysis.py`. Step through the analysis with the arrows in the side panel:
+    This notebook replays the work a student did in `01_initial-analysis.py`. Step through the analysis with the arrows in the side panel:
     each table shows what it looked like at the step you are on, and a table whose step has not happened yet says so. The choices
     the student made (time zone, time frame, ...) are shown as text; nothing here can be changed, and nothing is saved.
     """)
