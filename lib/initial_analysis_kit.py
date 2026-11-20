@@ -1,6 +1,6 @@
 """The analysis stages of the initial-analysis notebooks, as plain functions.
 
-`initial-analysis.py` runs each of them through `record(...)` (so a stage and the widget values that drove it become one recorded
+`01_initial-analysis.py` runs each of them through `record(...)` (so a stage and the widget values that drove it become one recorded
 step); `initial-review.py` replays the stored results. They are ports of the cells of the exploratory `initial-analysis` notebook,
 working on the enriched Dhana LoanApplication log (colon-free column names, see `scripts/xes_to_parquet.py`). None of them changes
 its input.

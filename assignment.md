@@ -50,7 +50,7 @@ The **model solution** (`model-solution.py`) replays an annotated analysis of th
 
 ## Initial analysis of the log
 
-Before the tasks above, you can explore a log with the **initial analysis notebook** (`initial-analysis.py`). It loads the Dhana
+Before the tasks above, you can explore a log with the **initial analysis notebook** (`01_initial-analysis.py`). It loads the Dhana
 LoanApplication log for you and lets you initialize it (time zone, granularity, time frame, mandatory columns), check how its
 timestamps are ordered, look at its global and local attributes, its cases and its activity schemas, and enrich the case log with
 your own code. Enter your key, press **Anchor** in the side panel, click the table (or a cell of it) you mean and write what you

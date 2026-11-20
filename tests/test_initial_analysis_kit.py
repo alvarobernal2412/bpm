@@ -578,7 +578,7 @@ def test_no_notebook_cell_ends_with_a_bare_enable_chart_builder_call():
     import ast
 
     root = Path(__file__).resolve().parent.parent
-    for name in ("lecture.py", "initial-analysis.py", "map-explorer.py"):
+    for name in ("00_lecture.py", "01_initial-analysis.py", "02_map-explorer.py"):
         for node in ast.parse((root / name).read_text(encoding="utf8")).body:
             if not isinstance(node, ast.FunctionDef):
                 continue
