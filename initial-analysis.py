@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.11.1",
+#     "marimo-pmprov[pdf]>=0.12.0",
 #     "pandas>=3.1.0",
 #     "pyarrow>=15",
 #     "altair>=5.5",
@@ -170,8 +170,9 @@ def _(PmprovAdapter, ProvenancePanel, rt):
         source=adapter,
         mode="analyst",
         tabs=["curated"],
+        capture_charts=True,  # marimo's Visualize on every table, and the charts built there recorded
         empty_hint=(
-            "No annotations yet. Press Anchor, click the table (or a cell of it) the annotation is about, write it with tags "
+            "No annotations yet. Press Anchor, click the table (or a cell of it, or a chart you built with Visualize) the annotation is about, write it with tags "
             "(for example intent or finding) and press Add."
         ),
     )

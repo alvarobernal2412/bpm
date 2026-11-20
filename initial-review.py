@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.11.1",
+#     "marimo-pmprov[pdf]>=0.12.0",
 #     "pandas>=3.1.0",
 #     "pyarrow>=15",
 #     "altair>=5.5",
@@ -39,7 +39,7 @@ def _():
 
     from provenance_widget.pmprov_adapter import PmprovAdapter
     from provenance_widget.widget import ProvenancePanel
-    from provenance_widget.display import show_table
+    from provenance_widget.display import show_recorded_charts, show_table
     from provenance_widget.sync import Sync
 
     def _folder_of_this_notebook():
@@ -86,7 +86,7 @@ def _():
 
     # The course server that keeps each student's work. A reviewer only reads it: nothing here ever saves.
     SYNC_URL = _os.environ.get("PMPROV_SYNC_URL", "https://provenance.alvispace.com")
-    return PmprovAdapter, ProvenancePanel, Path, SYNC_URL, Sync, ak, du, kit, mo, pd, show_table
+    return PmprovAdapter, ProvenancePanel, Path, SYNC_URL, Sync, ak, du, kit, mo, pd, show_recorded_charts, show_table
 
 
 @app.cell(hide_code=True)
@@ -153,6 +153,14 @@ def _(adapter, get_cursor, kit, mo, panel):
     snap = panel.snapshot(cursor_state)
     record, state_of = kit.reviewer_recorder(snap, mo)
     return cursor_state, record, snap, state_of
+
+
+@app.cell(hide_code=True)
+def _(adapter, cursor_state, mo, show_recorded_charts):
+    # the charts the student built in a table's Visualize tab, up to the step the side panel is on (nothing when there are none)
+    _charts = show_recorded_charts(adapter, cursor_state)
+    mo.vstack([mo.md("## Charts built in Visualize"), _charts]) if _charts.text else mo.md("")
+    return
 
 
 @app.cell(hide_code=True)
