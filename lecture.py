@@ -412,7 +412,7 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    _sample_enrichment = "# case_log['duration'] = case_log['end_time'] - case_log['start_time']"
+    _sample_enrichment = "# case_log['CRP_count'] = event_log.groupby(CASE_ID)['CRP'].count()"
 
     # the code that was submitted last (what the case log is built with)
     get_enrichment_code, set_enrichment_code = mo.state("")
