@@ -4,6 +4,7 @@
 #     "marimo>=0.25.2",
 #     "pandas>=3.1.0",
 #     "altair>=5.5",
+#     "vegafusion>=2.0",
 #     "pytz",
 # ]
 # ///
@@ -30,6 +31,7 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _():
+    import altair as alt
     import marimo as mo
     import pandas as pd
     import shutil as _shutil
@@ -37,6 +39,9 @@ def _():
     import tempfile as _tempfile
     import urllib.request as _request
     from pathlib import Path
+
+    # large tables are charted (marimo's Visualize and Explore tabs) by vegafusion instead of being capped at 5,000 rows
+    alt.data_transformers.enable("vegafusion")
 
     def _folder_of_this_notebook():
         try:
