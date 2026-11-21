@@ -207,7 +207,7 @@ def _(mo, save_tick, sync):
     save_tick  # runs again every few seconds
     _parts = []
     if sync is not None:
-        _kind = {"saved": "success", "idle": "neutral", "pending": "info"}.get(sync.status.state, "warn")
+        _kind = {"saved": "success", "idle": "neutral", "pending": "info", "conflict": "danger"}.get(sync.status.state, "warn")
         _parts.append(mo.callout(mo.md(sync.status.message), kind=_kind))
     mo.vstack(_parts + [save_tick.style(display="none")])  # the timer has to be on the page to tick, but it is not a control
     return
