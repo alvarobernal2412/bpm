@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -446,9 +447,16 @@ def sync_url(base: str, notebook: str) -> str:
 
 
 def session_folder(key: str, notebook: str) -> Path:
-    """Where one student's work in one notebook lives while it runs: a folder per key and notebook, so two notebooks that share a
-    key (and a computer) never write into each other's provenance."""
-    return Path(tempfile.gettempdir()) / "bpm-provenance" / hashlib.sha256(f"{key}/{notebook}".encode()).hexdigest()[:16]
+    """Where one student's work in one notebook lives on this computer: a folder per key and notebook, so two notebooks that share
+    a key (and a computer) never write into each other's provenance.
+
+    The student package names its data folder in `PMPROV_DIR`; the work is kept beside it (`synced/`), where it stays between
+    sessions, so a notebook opened without a connection still has it. Elsewhere (a hosted notebook) it is in the temporary folder."""
+    name = hashlib.sha256(f"{key}/{notebook}".encode()).hexdigest()[:16]
+    package_data = os.environ.get("PMPROV_DIR")
+    if package_data:
+        return Path(package_data).with_name("synced") / name
+    return Path(tempfile.gettempdir()) / "bpm-provenance" / name
 
 
 def write_notebook_info(folder, notebook: str, source, version: str | None = None) -> Path:

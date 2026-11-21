@@ -590,3 +590,15 @@ def test_no_notebook_cell_ends_with_a_bare_enable_chart_builder_call():
                 and getattr(last.value.func, "attr", getattr(last.value.func, "id", "")) == "enable_chart_builder"
             )
             assert not bare, f"{name}: a cell ends with a bare enable_chart_builder() and shows its True"
+
+
+def test_session_folder_is_kept_beside_the_student_package_s_own_data_and_not_in_the_temporary_folder(tmp_path, monkeypatch):
+    import tempfile
+
+    monkeypatch.setenv("PMPROV_DIR", str(tmp_path / ".hs-marimo26" / "provenance"))  # the student package sets this
+    kept = kit.session_folder("key-1", "map-explorer")
+    assert kept.parent == tmp_path / ".hs-marimo26" / "synced"  # a system clears its temporary folder; this one stays
+    assert kept != kit.session_folder("key-1", "initial-analysis")
+
+    monkeypatch.delenv("PMPROV_DIR")
+    assert Path(tempfile.gettempdir()) in kit.session_folder("key-1", "map-explorer").parents  # a hosted notebook: as before
