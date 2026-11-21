@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo>=0.25.2",
 #     "pmprov[duckdb,parquet,graph]>=0.10.0",
-#     "marimo-pmprov[pdf]>=0.13.0",
+#     "marimo-pmprov[pdf]>=0.14.0",
 #     "pandas>=3.1.0",
 #     "pyarrow>=15",
 #     "altair>=5.5",
