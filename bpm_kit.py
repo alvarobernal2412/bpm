@@ -108,7 +108,8 @@ class KeyBox(anywidget.AnyWidget):
         el.append(row);
         let stored = "";
         try { stored = localStorage.getItem(STORE) || ""; } catch (e) {}
-        if (stored) { input.value = stored; send(stored); }
+        // the page can draw this field more than once; a key that is already set is not sent again (each send runs the notebook)
+        if (stored) { input.value = stored; if (model.get("key") !== stored) send(stored); else other.style.display = "inline-block"; }
       },
     };
     """
