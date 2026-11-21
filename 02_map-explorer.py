@@ -27,7 +27,7 @@ def _(mo):
     mo.md(r"""
     # Map explorer
 
-    Your work is saved automatically. You can close this page and continue later with the same key. If marimo shows a message that something failed, or the page stops responding, reload the page: your work comes back as you left it.
+    Your work is saved automatically. You can close this page and continue later. If marimo shows a message that something failed, or the page stops responding, reload the page: your work comes back as you left it.
     """)
     return
 
